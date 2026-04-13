@@ -21,19 +21,22 @@ const signalBadge: Record<Signal, { className: string; icon: React.ReactNode }> 
 };
 
 export function StockDetailModal({ open, onOpenChange, stock, currentStrategy }: StockDetailModalProps) {
-  if (!stock) return null;
-
   const chartData = useMemo(() => {
+    if (!stock) return [];
+    const last60 = stock.prices.slice(0, 60).reverse();
     const last60 = stock.prices.slice(0, 60).reverse();
     return last60.map((p, i) => ({ day: i + 1, price: p }));
   }, [stock.prices]);
 
   const allResults = useMemo(() => {
+    if (!stock) return [];
     return strategies.map(s => ({
       strategy: s,
       result: applyStrategy(stock.symbol, stock.name, stock.prices, s.id),
     }));
   }, [stock]);
+
+  if (!stock) return null;
 
   const currentResult = allResults.find(r => r.strategy.id === currentStrategy)?.result;
   const price = stock.prices[0];
