@@ -24,9 +24,8 @@ export function StockDetailModal({ open, onOpenChange, stock, currentStrategy }:
   const chartData = useMemo(() => {
     if (!stock) return [];
     const last60 = stock.prices.slice(0, 60).reverse();
-    const last60 = stock.prices.slice(0, 60).reverse();
     return last60.map((p, i) => ({ day: i + 1, price: p }));
-  }, [stock.prices]);
+  }, [stock]);
 
   const allResults = useMemo(() => {
     if (!stock) return [];
