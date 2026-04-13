@@ -1,13 +1,16 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { stocks as mockStocks } from "@/lib/stockData";
 import { useBistStocks } from "@/hooks/useBistStocks";
+import { useAuth } from "@/hooks/useAuth";
 import { applyStrategy, type StrategyId, type Signal } from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
 import { SignalSummary } from "@/components/SignalSummary";
 import { StockDetailModal } from "@/components/StockDetailModal";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Activity, Filter, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, User } from "lucide-react";
 
 const signalFilters: { value: Signal | "ALL"; label: string }[] = [
   { value: "ALL", label: "Tümü" },
@@ -17,6 +20,8 @@ const signalFilters: { value: Signal | "ALL"; label: string }[] = [
 ];
 
 const Index = () => {
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [strategy, setStrategy] = useState<StrategyId>("ema5_22");
   const [signalFilter, setSignalFilter] = useState<Signal | "ALL">("ALL");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
@@ -45,22 +50,37 @@ const Index = () => {
               <p className="text-xs text-muted-foreground font-mono">.COM</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {isLoading ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
-                <span className="text-xs font-mono text-muted-foreground">Veriler yükleniyor...</span>
-              </>
-            ) : isLive ? (
-              <>
-                <Wifi className="w-3.5 h-3.5 text-bullish" />
-                <span className="text-xs font-mono text-muted-foreground">BIST100 • Canlı Veri</span>
-              </>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2">
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                  <span className="text-xs font-mono text-muted-foreground">Yükleniyor...</span>
+                </>
+              ) : isLive ? (
+                <>
+                  <Wifi className="w-3.5 h-3.5 text-bullish" />
+                  <span className="text-xs font-mono text-muted-foreground">Canlı</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3.5 h-3.5 text-bearish" />
+                  <span className="text-xs font-mono text-muted-foreground">Simülasyon</span>
+                </>
+              )}
+            </div>
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-muted-foreground hidden sm:inline truncate max-w-[120px]">{user.email}</span>
+                <Button variant="ghost" size="sm" onClick={signOut} className="h-8 px-2">
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
             ) : (
-              <>
-                <WifiOff className="w-3.5 h-3.5 text-bearish" />
-                <span className="text-xs font-mono text-muted-foreground">BIST100 • Simülasyon</span>
-              </>
+              <Button variant="default" size="sm" onClick={() => navigate("/auth")} className="h-8 gap-1.5 font-semibold">
+                <LogIn className="w-4 h-4" />
+                Üye Ol
+              </Button>
             )}
           </div>
         </div>
