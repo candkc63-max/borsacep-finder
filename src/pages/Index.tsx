@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
-import { stocks } from "@/lib/stockData";
+import { stocks as mockStocks } from "@/lib/stockData";
+import { useBistStocks } from "@/hooks/useBistStocks";
 import { applyStrategy, type StrategyId, type Signal } from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
 import { SignalSummary } from "@/components/SignalSummary";
 import { cn } from "@/lib/utils";
-import { Activity, Filter } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2 } from "lucide-react";
 
 const signalFilters: { value: Signal | "ALL"; label: string }[] = [
   { value: "ALL", label: "Tümü" },
@@ -17,10 +18,16 @@ const signalFilters: { value: Signal | "ALL"; label: string }[] = [
 const Index = () => {
   const [strategy, setStrategy] = useState<StrategyId>("ema5_22");
   const [signalFilter, setSignalFilter] = useState<Signal | "ALL">("ALL");
+  
+  const { data: liveStocks, isLoading, isError } = useBistStocks();
+  
+  // Use live data if available, fall back to mock
+  const stockData = liveStocks ?? mockStocks;
+  const isLive = !!liveStocks;
 
   const results = useMemo(() => {
-    return stocks.map(s => applyStrategy(s.symbol, s.name, s.prices, strategy));
-  }, [strategy]);
+    return stockData.map(s => applyStrategy(s.symbol, s.name, s.prices, strategy));
+  }, [strategy, stockData]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -37,13 +44,33 @@ const Index = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-bullish animate-pulse" />
-            <span className="text-xs font-mono text-muted-foreground">BIST100 • Canlı Tarama</span>
+            {isLoading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                <span className="text-xs font-mono text-muted-foreground">Veriler yükleniyor...</span>
+              </>
+            ) : isLive ? (
+              <>
+                <Wifi className="w-3.5 h-3.5 text-bullish" />
+                <span className="text-xs font-mono text-muted-foreground">BIST100 • Canlı Veri</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-bearish" />
+                <span className="text-xs font-mono text-muted-foreground">BIST100 • Simülasyon</span>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6">
+        {isError && (
+          <div className="rounded-lg border border-bearish bg-bearish/10 p-4 text-sm text-bearish">
+            ⚠ Canlı veri alınamadı. Simülasyon verileri gösteriliyor.
+          </div>
+        )}
+
         {/* Strategy Selector */}
         <section>
           <h2 className="text-sm font-mono text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -86,7 +113,7 @@ const Index = () => {
 
         {/* Disclaimer */}
         <p className="text-xs text-muted-foreground text-center py-4 font-mono">
-          ⚠ Bu veriler simülasyon amaçlıdır. Yatırım tavsiyesi değildir.
+          ⚠ {isLive ? "Veriler Yahoo Finance'ten alınmaktadır." : "Bu veriler simülasyon amaçlıdır."} Yatırım tavsiyesi değildir.
         </p>
       </main>
     </div>
