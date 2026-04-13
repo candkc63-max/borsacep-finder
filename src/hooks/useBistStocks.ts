@@ -1,0 +1,32 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Stock } from "@/lib/stockData";
+
+interface BistResponse {
+  stocks: Stock[];
+  timestamp: number;
+}
+
+async function fetchBistStocks(): Promise<Stock[]> {
+  const { data, error } = await supabase.functions.invoke<BistResponse>("bist-stocks");
+  
+  if (error) {
+    console.error("Edge function error:", error);
+    throw new Error("Hisse verileri alınamadı");
+  }
+  
+  if (!data?.stocks || data.stocks.length === 0) {
+    throw new Error("Veri bulunamadı");
+  }
+  
+  return data.stocks;
+}
+
+export function useBistStocks() {
+  return useQuery({
+    queryKey: ["bist-stocks"],
+    queryFn: fetchBistStocks,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 2,
+  });
+}
