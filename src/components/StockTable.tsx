@@ -11,9 +11,10 @@ const signalConfig: Record<Signal, { label: string; className: string; icon: Rea
 interface StockTableProps {
   results: StrategyResult[];
   filter: Signal | "ALL";
+  onStockClick?: (symbol: string) => void;
 }
 
-export function StockTable({ results, filter }: StockTableProps) {
+export function StockTable({ results, filter, onStockClick }: StockTableProps) {
   const filtered = filter === "ALL" ? results : results.filter(r => r.signal === filter);
 
   return (
@@ -35,7 +36,7 @@ export function StockTable({ results, filter }: StockTableProps) {
             {filtered.map((r) => {
               const sc = signalConfig[r.signal];
               return (
-                <tr key={r.symbol} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                <tr key={r.symbol} onClick={() => onStockClick?.(r.symbol)} className="border-b border-border/50 hover:bg-muted/30 transition-colors cursor-pointer">
                   <td className="p-3 font-mono font-bold text-foreground">{r.symbol}</td>
                   <td className="p-3 text-muted-foreground">{r.name}</td>
                   <td className="p-3 text-right font-mono font-semibold text-foreground">
