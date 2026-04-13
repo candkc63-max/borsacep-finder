@@ -5,6 +5,7 @@ import { applyStrategy, type StrategyId, type Signal } from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
 import { SignalSummary } from "@/components/SignalSummary";
+import { StockDetailModal } from "@/components/StockDetailModal";
 import { cn } from "@/lib/utils";
 import { Activity, Filter, Wifi, WifiOff, Loader2 } from "lucide-react";
 
@@ -18,6 +19,7 @@ const signalFilters: { value: Signal | "ALL"; label: string }[] = [
 const Index = () => {
   const [strategy, setStrategy] = useState<StrategyId>("ema5_22");
   const [signalFilter, setSignalFilter] = useState<Signal | "ALL">("ALL");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   
   const { data: liveStocks, isLoading, isError } = useBistStocks();
   
@@ -108,7 +110,7 @@ const Index = () => {
               ))}
             </div>
           </div>
-          <StockTable results={results} filter={signalFilter} />
+          <StockTable results={results} filter={signalFilter} onStockClick={setSelectedSymbol} />
         </section>
 
         {/* Disclaimer */}
@@ -116,6 +118,13 @@ const Index = () => {
           ⚠ {isLive ? "Veriler Yahoo Finance'ten alınmaktadır." : "Bu veriler simülasyon amaçlıdır."} Yatırım tavsiyesi değildir.
         </p>
       </main>
+
+      <StockDetailModal
+        open={!!selectedSymbol}
+        onOpenChange={(open) => !open && setSelectedSymbol(null)}
+        stock={selectedSymbol ? stockData.find(s => s.symbol === selectedSymbol) ?? null : null}
+        currentStrategy={strategy}
+      />
     </div>
   );
 };
