@@ -8,6 +8,8 @@ import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
 import { SignalSummary } from "@/components/SignalSummary";
 import { StockDetailModal } from "@/components/StockDetailModal";
+import { StockSearch } from "@/components/StockSearch";
+import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, User } from "lucide-react";
@@ -25,6 +27,7 @@ const Index = () => {
   const [strategy, setStrategy] = useState<StrategyId>("ema5_22");
   const [signalFilter, setSignalFilter] = useState<Signal | "ALL">("ALL");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   
   const { data: liveStocks, isLoading, isError } = useBistStocks();
   
@@ -33,8 +36,11 @@ const Index = () => {
   const isLive = !!liveStocks;
 
   const results = useMemo(() => {
-    return stockData.map(s => applyStrategy(s.symbol, s.name, s.prices, strategy));
-  }, [strategy, stockData]);
+    const all = stockData.map(s => applyStrategy(s.symbol, s.name, s.prices, strategy));
+    if (!searchQuery.trim()) return all;
+    const q = searchQuery.toLowerCase();
+    return all.filter(r => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
+  }, [strategy, stockData, searchQuery]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -105,8 +111,11 @@ const Index = () => {
         {/* Summary */}
         <SignalSummary results={results} />
 
-        {/* Signal Filter + Table */}
+        {/* Search + Signal Filter + Table */}
         <section>
+          <div className="mb-3">
+            <StockSearch value={searchQuery} onChange={setSearchQuery} />
+          </div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-mono text-muted-foreground uppercase tracking-wider">
               Tarama Sonuçları ({signalFilter === "ALL" ? results.length : results.filter(r => r.signal === signalFilter).length} hisse)
@@ -133,11 +142,9 @@ const Index = () => {
           <StockTable results={results} filter={signalFilter} onStockClick={setSelectedSymbol} />
         </section>
 
-        {/* Disclaimer */}
-        <p className="text-xs text-muted-foreground text-center py-4 font-mono">
-          ⚠ {isLive ? "Veriler Yahoo Finance'ten alınmaktadır." : "Bu veriler simülasyon amaçlıdır."} Yatırım tavsiyesi değildir.
-        </p>
       </main>
+
+      <Footer />
 
       <StockDetailModal
         open={!!selectedSymbol}
