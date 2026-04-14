@@ -24,13 +24,13 @@ export function Footer() {
             <h3 className="text-sm font-semibold text-foreground mb-3">Yasal</h3>
             <ul className="space-y-2 text-xs text-muted-foreground">
               <li>
-                <a href="/gizlilik" className="hover:text-foreground transition-colors">Gizlilik Politikası</a>
+                <a href="#gizlilik" className="hover:text-foreground transition-colors">Gizlilik Politikası</a>
               </li>
               <li>
-                <a href="/kullanim-kosullari" className="hover:text-foreground transition-colors">Kullanım Koşulları</a>
+                <a href="#kullanim-kosullari" className="hover:text-foreground transition-colors">Kullanım Koşulları</a>
               </li>
               <li>
-                <a href="/kvkk" className="hover:text-foreground transition-colors">KVKK Aydınlatma Metni</a>
+                <a href="#kvkk" className="hover:text-foreground transition-colors">KVKK Aydınlatma Metni</a>
               </li>
             </ul>
           </div>
