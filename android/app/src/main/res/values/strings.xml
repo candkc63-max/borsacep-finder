@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BORSACEP</string>
+    <string name="title_activity_main">BORSACEP</string>
+    <string name="package_name">com.borsacep.app</string>
+    <string name="custom_url_scheme">com.borsacep.app</string>
+</resources>

@@ -17,6 +17,12 @@ dist-ssr
 .env.*
 !.env.example
 
+# Capacitor native builds
+android/app/build
+android/.gradle
+ios/App/Pods
+ios/DerivedData
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
