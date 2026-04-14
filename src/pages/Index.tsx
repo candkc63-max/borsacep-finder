@@ -1,19 +1,23 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { stocks as mockStocks } from "@/lib/stockData";
 import { useBistStocks } from "@/hooks/useBistStocks";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavorites } from "@/hooks/useFavorites";
-import { applyStrategy, strategies, type StrategyId, type Signal } from "@/lib/indicators";
+import { useTheme } from "@/hooks/useTheme";
+import { usePortfolio } from "@/hooks/usePortfolio";
+import { useNotifications } from "@/hooks/useNotifications";
+import { applyStrategy, strategies, type StrategyId, type Signal, type Timeframe } from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
 import { SignalSummary } from "@/components/SignalSummary";
 import { StockDetailModal } from "@/components/StockDetailModal";
 import { StockSearch } from "@/components/StockSearch";
+import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, User, RefreshCw, Star } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock } from "lucide-react";
 
 const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
   { value: "ALL", label: "Tümü" },
@@ -23,10 +27,21 @@ const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
   { value: "FAV", label: "Favoriler" },
 ];
 
+const timeframeFilters: { value: Timeframe | "all"; label: string }[] = [
+  { value: "all", label: "Tüm Vadeler" },
+  { value: "kisa", label: "Kısa Vade" },
+  { value: "orta", label: "Orta Vade" },
+  { value: "uzun", label: "Uzun Vade" },
+];
+
 const Index = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { toggleFavorite, isFavorite } = useFavorites();
+  const { theme, toggleTheme } = useTheme();
+  const { portfolio, addToPortfolio, removeFromPortfolio } = usePortfolio();
+  const { enabled: notifEnabled, toggleNotifications, sendNotification } = useNotifications();
+  const [showPortfolio, setShowPortfolio] = useState(false);
 
   const [strategy, setStrategy] = useState<StrategyId>(() => {
     try {
@@ -40,6 +55,7 @@ const Index = () => {
       return (saved === "AL" || saved === "SAT" || saved === "NÖTR" || saved === "ALL" || saved === "FAV") ? saved : "ALL";
     } catch { return "ALL"; }
   });
+  const [timeframeFilter, setTimeframeFilter] = useState<Timeframe | "all">("all");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -54,9 +70,21 @@ const Index = () => {
 
   const { data: liveStocks, isLoading, isError, refetch } = useBistStocks();
 
-  // Use live data if available, fall back to mock
   const stockData = liveStocks ?? mockStocks;
   const isLive = !!liveStocks;
+
+  // Filter strategies by timeframe
+  const filteredStrategies = useMemo(() => {
+    if (timeframeFilter === "all") return strategies;
+    return strategies.filter(s => s.timeframe === timeframeFilter);
+  }, [timeframeFilter]);
+
+  // Auto-select first strategy of filtered timeframe
+  useEffect(() => {
+    if (filteredStrategies.length > 0 && !filteredStrategies.some(s => s.id === strategy)) {
+      setStrategy(filteredStrategies[0].id);
+    }
+  }, [filteredStrategies, strategy]);
 
   const results = useMemo(() => {
     const all = stockData.map(s => applyStrategy(s.symbol, s.name, s.prices, strategy));
@@ -64,6 +92,19 @@ const Index = () => {
     const q = debouncedSearch.toLowerCase();
     return all.filter(r => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
   }, [strategy, stockData, debouncedSearch]);
+
+  // Notification: alert when new AL signals appear
+  const prevAlCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    const alCount = results.filter(r => r.signal === "AL").length;
+    if (prevAlCountRef.current !== null && alCount > prevAlCountRef.current) {
+      const diff = alCount - prevAlCountRef.current;
+      sendNotification("BORSACEP - Yeni AL Sinyali!", `${diff} yeni hissede AL sinyali tespit edildi.`);
+    }
+    prevAlCountRef.current = alCount;
+  }, [results, sendNotification]);
+
+  const filteredCount = signalFilter === "ALL" ? results.length : signalFilter === "FAV" ? results.filter(r => isFavorite(r.symbol)).length : results.filter(r => r.signal === signalFilter).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,8 +120,8 @@ const Index = () => {
               <p className="text-xs text-muted-foreground font-mono">.COM</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <div className="hidden sm:flex items-center gap-2 mr-2">
               {isLoading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
@@ -98,24 +139,27 @@ const Index = () => {
                 </>
               )}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => refetch()}
-              className="h-8 w-8 p-0"
-              title="Verileri yenile"
-            >
+            <Button variant="ghost" size="sm" onClick={() => refetch()} className="h-8 w-8 p-0" title="Verileri yenile">
               <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
             </Button>
+            <Button variant="ghost" size="sm" onClick={toggleTheme} className="h-8 w-8 p-0" title={theme === "dark" ? "Aydınlık tema" : "Karanlık tema"}>
+              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={toggleNotifications} className="h-8 w-8 p-0" title={notifEnabled ? "Bildirimleri kapat" : "Bildirimleri aç"}>
+              {notifEnabled ? <Bell className="w-3.5 h-3.5 text-primary" /> : <BellOff className="w-3.5 h-3.5" />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowPortfolio(!showPortfolio)} className={cn("h-8 w-8 p-0", showPortfolio && "bg-primary/10")} title="Portföy">
+              <Briefcase className="w-3.5 h-3.5" />
+            </Button>
             {user ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-muted-foreground hidden sm:inline truncate max-w-[120px]">{user.email}</span>
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className="text-xs font-mono text-muted-foreground hidden sm:inline truncate max-w-[100px]">{user.email}</span>
                 <Button variant="ghost" size="sm" onClick={signOut} className="h-8 px-2">
                   <LogOut className="w-4 h-4" />
                 </Button>
               </div>
             ) : (
-              <Button variant="default" size="sm" onClick={() => navigate("/auth")} className="h-8 gap-1.5 font-semibold">
+              <Button variant="default" size="sm" onClick={() => navigate("/auth")} className="h-8 gap-1.5 font-semibold ml-1">
                 <LogIn className="w-4 h-4" />
                 Üye Ol
               </Button>
@@ -127,18 +171,46 @@ const Index = () => {
       <main className="container mx-auto px-4 py-6 space-y-6">
         {isError && (
           <div className="rounded-lg border border-bearish bg-bearish/10 p-4 text-sm text-bearish flex items-center justify-between">
-            <span>⚠ Canlı veri alınamadı. Simülasyon verileri gösteriliyor.</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              className="border-bearish text-bearish hover:bg-bearish/20"
-            >
+            <span>Canlı veri alınamadı. Simülasyon verileri gösteriliyor.</span>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="border-bearish text-bearish hover:bg-bearish/20">
               <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
               Tekrar Dene
             </Button>
           </div>
         )}
+
+        {/* Portfolio Panel */}
+        {showPortfolio && (
+          <PortfolioPanel
+            portfolio={portfolio}
+            stockData={stockData}
+            onRemove={removeFromPortfolio}
+          />
+        )}
+
+        {/* Timeframe Filter */}
+        <section>
+          <h2 className="text-sm font-mono text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5" />
+            Vade Seçin
+          </h2>
+          <div className="flex gap-2 flex-wrap">
+            {timeframeFilters.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setTimeframeFilter(f.value)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                  timeframeFilter === f.value
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* Strategy Selector */}
         <section>
@@ -146,7 +218,7 @@ const Index = () => {
             <Filter className="w-3.5 h-3.5" />
             Strateji Seçin
           </h2>
-          <StrategySelector selected={strategy} onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }} />
+          <StrategySelector selected={strategy} onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }} strategies={filteredStrategies} />
         </section>
 
         {/* Summary */}
@@ -159,9 +231,9 @@ const Index = () => {
           </div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-mono text-muted-foreground uppercase tracking-wider">
-              Tarama Sonuçları ({signalFilter === "ALL" ? results.length : signalFilter === "FAV" ? results.filter(r => isFavorite(r.symbol)).length : results.filter(r => r.signal === signalFilter).length} hisse)
+              Tarama Sonuçları ({filteredCount} hisse)
             </h2>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {signalFilters.map(f => (
                 <button
                   key={f.value}
@@ -206,7 +278,6 @@ const Index = () => {
             />
           )}
         </section>
-
       </main>
 
       <Footer />
@@ -216,6 +287,7 @@ const Index = () => {
         onOpenChange={(open) => !open && setSelectedSymbol(null)}
         stock={selectedSymbol ? stockData.find(s => s.symbol === selectedSymbol) ?? null : null}
         currentStrategy={strategy}
+        onAddToPortfolio={addToPortfolio}
       />
     </div>
   );

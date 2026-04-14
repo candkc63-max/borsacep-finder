@@ -37,6 +37,51 @@ export function calcPrevSMA(prices: number[], period: number): number | null {
   return calcSMA(prices.slice(1), period);
 }
 
+/** Calculate RSI (Relative Strength Index) */
+export function calcRSI(prices: number[], period = 14): number | null {
+  if (prices.length < period + 1) return null;
+  const chronological = prices.slice(0, period + 1).reverse();
+  let gains = 0, losses = 0;
+  for (let i = 1; i < chronological.length; i++) {
+    const diff = chronological[i] - chronological[i - 1];
+    if (diff > 0) gains += diff;
+    else losses -= diff;
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - 100 / (1 + rs);
+}
+
+/** Calculate Bollinger Bands */
+export function calcBollinger(prices: number[], period = 20, multiplier = 2): { upper: number; middle: number; lower: number } | null {
+  const sma = calcSMA(prices, period);
+  if (!sma || prices.length < period) return null;
+  const slice = prices.slice(0, period);
+  const variance = slice.reduce((sum, p) => sum + Math.pow(p - sma, 2), 0) / period;
+  const std = Math.sqrt(variance);
+  return { upper: sma + multiplier * std, middle: sma, lower: sma - multiplier * std };
+}
+
+/** Calculate MACD */
+export function calcMACD(prices: number[]): { macd: number; signal: number; histogram: number } | null {
+  const ema12 = calcEMA(prices, 12);
+  const ema26 = calcEMA(prices, 26);
+  if (!ema12 || !ema26) return null;
+  const macd = ema12 - ema26;
+  // Simplified: use 9-period approximation for signal line
+  const macdValues: number[] = [];
+  for (let i = 0; i < Math.min(9, prices.length - 26); i++) {
+    const e12 = calcEMA(prices.slice(i), 12);
+    const e26 = calcEMA(prices.slice(i), 26);
+    if (e12 && e26) macdValues.push(e12 - e26);
+  }
+  if (macdValues.length < 9) return { macd, signal: macd, histogram: 0 };
+  const signal = macdValues.reduce((a, b) => a + b, 0) / macdValues.length;
+  return { macd, signal, histogram: macd - signal };
+}
+
 export type Signal = "AL" | "SAT" | "NÖTR";
 
 export interface StrategyResult {
@@ -56,19 +101,22 @@ export type StrategyId =
   | "trend_50_200"
   | "pullback";
 
+export type Timeframe = "kisa" | "orta" | "uzun";
+
 export interface Strategy {
   id: StrategyId;
   name: string;
   description: string;
   style: string;
+  timeframe: Timeframe;
 }
 
 export const strategies: Strategy[] = [
-  { id: "ema5_22", name: "5 EMA / 22 EMA", description: "Trend değişimlerini erken yakalar", style: "Swing Trade" },
-  { id: "ema9_sma20", name: "9 EMA / 20 SMA", description: "Güçlü trendlerde destek seviyelerini belirler", style: "Momentum" },
-  { id: "fib_5_8_13", name: "5-8-13 Fibonacci EMA", description: "Fiyat hareketlerine çok duyarlıdır", style: "Agresif Trade" },
-  { id: "trend_50_200", name: "50 SMA / 200 SMA", description: "Daha az hatalı sinyal üretir", style: "Orta-Kısa Vade" },
-  { id: "pullback", name: "Pullback Filtresi", description: "Geri çekilme sonrası giriş noktası", style: "Pullback" },
+  { id: "ema5_22", name: "5 EMA / 22 EMA", description: "Trend değişimlerini erken yakalar", style: "Swing Trade", timeframe: "kisa" },
+  { id: "ema9_sma20", name: "9 EMA / 20 SMA", description: "Güçlü trendlerde destek seviyelerini belirler", style: "Momentum", timeframe: "orta" },
+  { id: "fib_5_8_13", name: "5-8-13 Fibonacci EMA", description: "Fiyat hareketlerine çok duyarlıdır", style: "Agresif Trade", timeframe: "kisa" },
+  { id: "trend_50_200", name: "50 SMA / 200 SMA", description: "Daha az hatalı sinyal üretir", style: "Uzun Vade", timeframe: "uzun" },
+  { id: "pullback", name: "Pullback Filtresi", description: "Geri çekilme sonrası giriş noktası", style: "Pullback", timeframe: "orta" },
 ];
 
 export function applyStrategy(
