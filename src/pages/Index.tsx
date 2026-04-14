@@ -29,19 +29,23 @@ const Index = () => {
   const { toggleFavorite, isFavorite } = useFavorites();
 
   const [strategy, setStrategy] = useState<StrategyId>(() => {
-    const saved = localStorage.getItem("borsacep-strategy");
-    return (saved && strategies.some(s => s.id === saved)) ? saved as StrategyId : "ema5_22";
+    try {
+      const saved = localStorage.getItem("borsacep-strategy");
+      return (saved && strategies.some(s => s.id === saved)) ? saved as StrategyId : "ema5_22";
+    } catch { return "ema5_22"; }
   });
   const [signalFilter, setSignalFilter] = useState<Signal | "ALL" | "FAV">(() => {
-    const saved = localStorage.getItem("borsacep-signal-filter");
-    return (saved === "AL" || saved === "SAT" || saved === "NÖTR" || saved === "ALL" || saved === "FAV") ? saved : "ALL";
+    try {
+      const saved = localStorage.getItem("borsacep-signal-filter");
+      return (saved === "AL" || saved === "SAT" || saved === "NÖTR" || saved === "ALL" || saved === "FAV") ? saved : "ALL";
+    } catch { return "ALL"; }
   });
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  useEffect(() => { localStorage.setItem("borsacep-strategy", strategy); }, [strategy]);
-  useEffect(() => { localStorage.setItem("borsacep-signal-filter", signalFilter); }, [signalFilter]);
+  useEffect(() => { try { localStorage.setItem("borsacep-strategy", strategy); } catch {} }, [strategy]);
+  useEffect(() => { try { localStorage.setItem("borsacep-signal-filter", signalFilter); } catch {} }, [signalFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 200);

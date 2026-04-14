@@ -1,4 +1,4 @@
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "https://borsacep-finder.lovable.app";
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "*";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,

@@ -12,7 +12,7 @@ function loadFavorites(): Set<string> {
 }
 
 function saveFavorites(favorites: Set<string>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...favorites]));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...favorites])); } catch {}
 }
 
 export function useFavorites() {
