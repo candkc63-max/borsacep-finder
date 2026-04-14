@@ -1,4 +1,4 @@
-import { strategies, type StrategyId } from "@/lib/indicators";
+import type { Strategy, StrategyId } from "@/lib/indicators";
 import { cn } from "@/lib/utils";
 import { TrendingUp, BarChart3, Zap, Shield, ArrowDownUp } from "lucide-react";
 
@@ -13,11 +13,12 @@ const icons: Record<StrategyId, React.ReactNode> = {
 interface StrategySelectorProps {
   selected: StrategyId;
   onSelect: (id: StrategyId) => void;
+  strategies: Strategy[];
 }
 
-export function StrategySelector({ selected, onSelect }: StrategySelectorProps) {
+export function StrategySelector({ selected, onSelect, strategies }: StrategySelectorProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+    <div className={cn("grid gap-3", strategies.length <= 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-" + Math.min(strategies.length, 5))}>
       {strategies.map((s) => (
         <button
           key={s.id}
