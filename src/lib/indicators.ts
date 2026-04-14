@@ -1,20 +1,29 @@
 // Technical indicator calculations
 
+/** Pullback tolerance: price within +/- 0.5% of EMA is considered pullback zone */
+const PULLBACK_TOLERANCE = 0.005;
+
 export function calcSMA(prices: number[], period: number): number | null {
   if (prices.length < period) return null;
   const sum = prices.slice(0, period).reduce((a, b) => a + b, 0);
   return sum / period;
 }
 
+/**
+ * Calculate Exponential Moving Average.
+ * @param prices - Array of closing prices, newest first (prices[0] = today)
+ * @param period - EMA period (e.g. 5, 9, 22)
+ * @returns The current EMA value, or null if insufficient data
+ */
 export function calcEMA(prices: number[], period: number): number | null {
   if (prices.length < period) return null;
-  // Start with SMA for initial value, then apply EMA formula
-  // prices[0] is newest
-  const reversed = prices.slice(0, Math.min(prices.length, period * 3)).reverse();
+  // Convert to chronological order (oldest first) for forward-pass EMA.
+  // Limit lookback to period*3 — beyond that, impact on EMA is negligible.
+  const chronological = prices.slice(0, Math.min(prices.length, period * 3)).reverse();
   const k = 2 / (period + 1);
-  let ema = reversed.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < reversed.length; i++) {
-    ema = reversed[i] * k + ema * (1 - k);
+  let ema = chronological.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < chronological.length; i++) {
+    ema = chronological[i] * k + ema * (1 - k);
   }
   return ema;
 }
@@ -105,7 +114,7 @@ export function applyStrategy(
           signal = "AL"; details = "Fiyat her iki ortalamanın üzerinde (Güçlü yükseliş)";
         } else if (price < ema9 && price < sma20) {
           signal = "SAT"; details = "Fiyat her iki ortalamanın altında";
-        } else if (price > sma20 && price <= ema9 * 1.005 && price >= ema9 * 0.995) {
+        } else if (price > sma20 && price <= ema9 * (1 + PULLBACK_TOLERANCE) && price >= ema9 * (1 - PULLBACK_TOLERANCE)) {
           signal = "AL"; details = "Fiyat EMA 9'a geri çekildi (Pullback alımı)";
         } else {
           details = "Kararsız bölge";
@@ -171,6 +180,16 @@ export function applyStrategy(
         }
       }
       return { symbol, name, price, change, signal, details, indicators: { "SMA 50": sma50, "EMA 10": ema10 } };
+    }
+
+    default: {
+      const _exhaustive: never = strategyId;
+      return {
+        symbol, name, price, change,
+        signal: "NÖTR" as Signal,
+        details: `Bilinmeyen strateji: ${strategyId}`,
+        indicators: {},
+      };
     }
   }
 }

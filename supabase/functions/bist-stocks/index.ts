@@ -1,5 +1,7 @@
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "*";
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -54,7 +56,8 @@ async function fetchYahooData(symbol: string): Promise<number[] | null> {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${from}&period2=${now}&interval=1d`;
     
     const resp = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" }
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(10_000),
     });
     
     if (!resp.ok) {
@@ -89,7 +92,8 @@ Deno.serve(async (req) => {
       const batchResults = await Promise.all(
         batch.map(async (symbol) => {
           const prices = await fetchYahooData(symbol);
-          if (prices && prices.length >= 20) {
+          // Need at least 50 data points for meaningful technical analysis
+          if (prices && prices.length >= 50) {
             return { symbol, name: STOCK_NAMES[symbol] || symbol, prices };
           }
           return null;

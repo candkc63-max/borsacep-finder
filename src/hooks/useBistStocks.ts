@@ -9,16 +9,23 @@ interface BistResponse {
 
 async function fetchBistStocks(): Promise<Stock[]> {
   const { data, error } = await supabase.functions.invoke<BistResponse>("bist-stocks");
-  
+
   if (error) {
     console.error("Edge function error:", error);
-    throw new Error("Hisse verileri alınamadı");
+    const msg = error.message || "";
+    if (msg.includes("FunctionsFetchError") || msg.includes("Failed to fetch")) {
+      throw new Error("Sunucuya bağlanılamıyor. İnternet bağlantınızı kontrol edin.");
+    }
+    if (msg.includes("401") || msg.includes("403")) {
+      throw new Error("Yetkilendirme hatası. Lütfen tekrar giriş yapın.");
+    }
+    throw new Error("Hisse verileri alınamadı. Lütfen daha sonra tekrar deneyin.");
   }
-  
+
   if (!data?.stocks || data.stocks.length === 0) {
-    throw new Error("Veri bulunamadı");
+    throw new Error("Veri bulunamadı. Piyasa kapalı olabilir.");
   }
-  
+
   return data.stocks;
 }
 
