@@ -18,7 +18,7 @@ interface StrategySelectorProps {
 
 export function StrategySelector({ selected, onSelect, strategies }: StrategySelectorProps) {
   return (
-    <div className={cn("grid gap-3", strategies.length <= 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-" + Math.min(strategies.length, 5))}>
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       {strategies.map((s) => (
         <button
           key={s.id}
