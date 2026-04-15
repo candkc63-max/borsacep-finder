@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,10 +12,15 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
-
 @layer base {
   :root {
+    --radius: 0.5rem;
+    --bullish: 142 72% 45%;
+    --bearish: 0 72% 55%;
+    --neutral: 38 92% 50%;
+  }
+
+  :root, .dark {
     --background: 220 20% 7%;
     --foreground: 210 20% 90%;
 
@@ -41,12 +48,6 @@ body {
     --border: 220 14% 18%;
     --input: 220 14% 18%;
     --ring: 142 72% 45%;
-
-    --radius: 0.5rem;
-
-    --bullish: 142 72% 45%;
-    --bearish: 0 72% 55%;
-    --neutral: 38 92% 50%;
 
     --sidebar-background: 220 18% 10%;
     --sidebar-foreground: 210 20% 90%;
