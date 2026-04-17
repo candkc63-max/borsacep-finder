@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
 import { isInIndex } from "@/lib/indices";
+import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fundamentals";
 import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock } from "lucide-react";
 
 const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
@@ -175,6 +176,13 @@ const Index = () => {
 
         if (advFilters.index) {
           if (!isInIndex(r.symbol, advFilters.index)) return false;
+        }
+
+        if (advFilters.marketCap || advFilters.pe || advFilters.div) {
+          const f = getFundamentals(r.symbol);
+          if (advFilters.marketCap && getMarketCapBucket(f.marketCap) !== advFilters.marketCap) return false;
+          if (advFilters.pe && !matchPe(f.pe, advFilters.pe)) return false;
+          if (advFilters.div && !matchDiv(f.divYield, advFilters.div)) return false;
         }
 
         return true;
