@@ -71,6 +71,7 @@ const Index = () => {
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [sectorFilter, setSectorFilter] = useState<Sector | "ALL">("ALL");
   const [preset, setPreset] = useState<Preset>(null);
+  const [advFilters, setAdvFilters] = useState<AdvancedFilterState>(emptyAdvancedFilters);
 
   useEffect(() => { try { localStorage.setItem("borsacep-strategy", strategy); } catch {} }, [strategy]);
   useEffect(() => { try { localStorage.setItem("borsacep-signal-filter", signalFilter); } catch {} }, [signalFilter]);
