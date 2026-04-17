@@ -1,1 +1,4 @@
 project_id = "nrhqatrytewfikqtpvjs"
+
+[functions.bist-stocks]
+verify_jwt = false
