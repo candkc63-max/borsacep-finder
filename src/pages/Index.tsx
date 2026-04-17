@@ -7,7 +7,11 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useTheme } from "@/hooks/useTheme";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useNotifications } from "@/hooks/useNotifications";
-import { applyStrategy, strategies, type StrategyId, type Signal, type Timeframe } from "@/lib/indicators";
+import {
+  applyStrategy, strategies, calcRSI, detectEmaCross, detectMacdCross,
+  detectBollingerState, isVolumeSpike, calcMACD,
+  type StrategyId, type Signal, type Timeframe,
+} from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
 import { SignalSummary } from "@/components/SignalSummary";
@@ -15,6 +19,7 @@ import { StockDetailModal } from "@/components/StockDetailModal";
 import { StockSearch } from "@/components/StockSearch";
 import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { QuickFilters, type Preset } from "@/components/QuickFilters";
+import { AdvancedFilters, emptyAdvancedFilters, type AdvancedFilterState } from "@/components/AdvancedFilters";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
