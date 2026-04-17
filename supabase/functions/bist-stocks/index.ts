@@ -49,34 +49,71 @@ const STOCK_NAMES: Record<string, string> = {
   ERBOS:"Erbosan",FENER:"Fenerbahçe Futbol",GEDZA:"Gediz Ambalaj",HUBGL:"Hub Girişim"
 };
 
+const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_YFINANCE_KEY");
+const RAPIDAPI_HOST = "yahoo-finance15.p.rapidapi.com";
+
+interface Fundamentals {
+  pe: number | null;
+  marketCap: number | null; // milyar TL
+  divYield: number | null;  // %
+}
+
 async function fetchYahooData(symbol: string): Promise<number[] | null> {
   try {
     const yahooSymbol = `${symbol}.IS`;
     const now = Math.floor(Date.now() / 1000);
     const from = now - 86400 * 300;
-    
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${from}&period2=${now}&interval=1d`;
-    
     const resp = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
       signal: AbortSignal.timeout(10_000),
     });
-    
     if (!resp.ok) {
-      console.error(`Yahoo Finance error for ${symbol}: ${resp.status}`);
+      console.error(`Yahoo chart error for ${symbol}: ${resp.status}`);
       return null;
     }
-    
     const data = await resp.json();
     const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-    
     if (!closes || !Array.isArray(closes)) return null;
-    
     const valid = closes.filter((c: number | null) => c !== null) as number[];
     return valid.reverse().slice(0, 200);
   } catch (err) {
     console.error(`Error fetching ${symbol}:`, err);
     return null;
+  }
+}
+
+async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
+  const empty: Fundamentals = { pe: null, marketCap: null, divYield: null };
+  if (!RAPIDAPI_KEY) return empty;
+  try {
+    const yahooSymbol = `${symbol}.IS`;
+    // YH Finance (RapidAPI) - quote endpoint returns trailingPE, marketCap, dividendYield
+    const url = `https://${RAPIDAPI_HOST}/api/yahoo/qu/quote/${yahooSymbol}`;
+    const resp = await fetch(url, {
+      headers: {
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-host": RAPIDAPI_HOST,
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) {
+      console.error(`RapidAPI fundamentals error for ${symbol}: ${resp.status}`);
+      return empty;
+    }
+    const data = await resp.json();
+    const q = Array.isArray(data?.body) ? data.body[0] : data?.body || data?.quoteResponse?.result?.[0] || data;
+    const pe = typeof q?.trailingPE === "number" ? q.trailingPE : null;
+    const mcRaw = typeof q?.marketCap === "number" ? q.marketCap : null;
+    const marketCap = mcRaw ? Math.round((mcRaw / 1_000_000_000) * 10) / 10 : null; // milyar TL
+    const dyRaw = typeof q?.trailingAnnualDividendYield === "number"
+      ? q.trailingAnnualDividendYield
+      : (typeof q?.dividendYield === "number" ? q.dividendYield : null);
+    const divYield = dyRaw !== null ? Math.round(dyRaw * 100 * 10) / 10 : null;
+    return { pe, marketCap, divYield };
+  } catch (err) {
+    console.error(`Error fetching fundamentals ${symbol}:`, err);
+    return empty;
   }
 }
 
@@ -109,22 +146,23 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    const results: Array<{ symbol: string; name: string; prices: number[] }> = [];
-    
+    const results: Array<{ symbol: string; name: string; prices: number[]; fundamentals: Fundamentals }> = [];
+
     // Process in batches of 10 to avoid rate limiting
     for (let i = 0; i < BIST100_SYMBOLS.length; i += 10) {
       const batch = BIST100_SYMBOLS.slice(i, i + 10);
       const batchResults = await Promise.all(
         batch.map(async (symbol) => {
-          const prices = await fetchYahooData(symbol);
-          // Need at least 50 data points for meaningful technical analysis
+          const [prices, fundamentals] = await Promise.all([
+            fetchYahooData(symbol),
+            fetchFundamentals(symbol),
+          ]);
           if (prices && prices.length >= 50) {
-            return { symbol, name: STOCK_NAMES[symbol] || symbol, prices };
+            return { symbol, name: STOCK_NAMES[symbol] || symbol, prices, fundamentals };
           }
           return null;
         })
       );
-      
       for (const r of batchResults) {
         if (r) results.push(r);
       }
