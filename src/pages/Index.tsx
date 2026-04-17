@@ -14,9 +14,11 @@ import { SignalSummary } from "@/components/SignalSummary";
 import { StockDetailModal } from "@/components/StockDetailModal";
 import { StockSearch } from "@/components/StockSearch";
 import { PortfolioPanel } from "@/components/PortfolioPanel";
+import { QuickFilters, type Preset } from "@/components/QuickFilters";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getSector, type Sector } from "@/lib/sectors";
 import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock } from "lucide-react";
 
 const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
@@ -59,6 +61,11 @@ const Index = () => {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [onlyBuy, setOnlyBuy] = useState(false);
+  const [onlySell, setOnlySell] = useState(false);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [sectorFilter, setSectorFilter] = useState<Sector | "ALL">("ALL");
+  const [preset, setPreset] = useState<Preset>(null);
 
   useEffect(() => { try { localStorage.setItem("borsacep-strategy", strategy); } catch {} }, [strategy]);
   useEffect(() => { try { localStorage.setItem("borsacep-signal-filter", signalFilter); } catch {} }, [signalFilter]);
@@ -87,11 +94,41 @@ const Index = () => {
   }, [filteredStrategies, strategy]);
 
   const results = useMemo(() => {
-    const all = stockData.map(s => applyStrategy(s.symbol, s.name, s.prices, strategy));
-    if (!debouncedSearch.trim()) return all;
-    const q = debouncedSearch.toLowerCase();
-    return all.filter(r => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
-  }, [strategy, stockData, debouncedSearch]);
+    let all = stockData.map(s => applyStrategy(s.symbol, s.name, s.prices, strategy));
+
+    // Arama
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
+      all = all.filter(r => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
+    }
+
+    // Sektör
+    if (sectorFilter !== "ALL") {
+      all = all.filter(r => getSector(r.symbol) === sectorFilter);
+    }
+
+    // Hızlı toggle'lar
+    if (onlyBuy) all = all.filter(r => r.signal === "AL");
+    if (onlySell) all = all.filter(r => r.signal === "SAT");
+    if (onlyFavorites) all = all.filter(r => isFavorite(r.symbol));
+
+    // Preset'ler
+    if (preset === "strong_buy") {
+      all = all.filter(r => r.signal === "AL" && r.change >= 2);
+    } else if (preset === "dip") {
+      all = all.filter(r => r.signal === "AL" && r.change <= -2);
+    } else if (preset === "momentum") {
+      all = all.filter(r => {
+        if (r.signal !== "AL") return false;
+        const stock = stockData.find(s => s.symbol === r.symbol);
+        if (!stock || stock.prices.length < 4) return false;
+        // prices[0] = bugün (en yeni). Ardışık 3 gün yükseliş = p0>p1>p2>p3
+        return stock.prices[0] > stock.prices[1] && stock.prices[1] > stock.prices[2] && stock.prices[2] > stock.prices[3];
+      });
+    }
+
+    return all;
+  }, [strategy, stockData, debouncedSearch, sectorFilter, onlyBuy, onlySell, onlyFavorites, isFavorite, preset]);
 
   // Notification: alert when new AL signals appear
   const prevAlCountRef = useRef<number | null>(null);
@@ -220,6 +257,20 @@ const Index = () => {
           </h2>
           <StrategySelector selected={strategy} onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }} strategies={filteredStrategies} />
         </section>
+
+        {/* Quick Filters: presets + AL/SAT/Favoriler + Sektör */}
+        <QuickFilters
+          onlyBuy={onlyBuy}
+          onlySell={onlySell}
+          onlyFavorites={onlyFavorites}
+          sector={sectorFilter}
+          preset={preset}
+          onToggleBuy={() => { setOnlyBuy(v => !v); if (!onlyBuy) setOnlySell(false); }}
+          onToggleSell={() => { setOnlySell(v => !v); if (!onlySell) setOnlyBuy(false); }}
+          onToggleFavorites={() => setOnlyFavorites(v => !v)}
+          onSectorChange={setSectorFilter}
+          onPresetChange={setPreset}
+        />
 
         {/* Summary */}
         <SignalSummary results={results} />
