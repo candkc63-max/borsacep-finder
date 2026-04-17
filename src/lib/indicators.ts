@@ -82,6 +82,59 @@ export function calcMACD(prices: number[]): { macd: number; signal: number; hist
   return { macd, signal, histogram: macd - signal };
 }
 
+/**
+ * Detects EMA crossover that occurred on the latest bar.
+ * Returns "golden" if fast crossed above slow today, "death" if fast crossed below today.
+ */
+export function detectEmaCross(prices: number[], fast = 5, slow = 22): "golden" | "death" | null {
+  const ef = calcEMA(prices, fast);
+  const es = calcEMA(prices, slow);
+  const pef = calcPrevEMA(prices, fast);
+  const pes = calcPrevEMA(prices, slow);
+  if (ef == null || es == null || pef == null || pes == null) return null;
+  if (pef <= pes && ef > es) return "golden";
+  if (pef >= pes && ef < es) return "death";
+  return null;
+}
+
+/** Detects MACD signal-line crossover on the latest bar. */
+export function detectMacdCross(prices: number[]): "bullish_cross" | "bearish_cross" | null {
+  const cur = calcMACD(prices);
+  const prev = calcMACD(prices.slice(1));
+  if (!cur || !prev) return null;
+  const curDiff = cur.macd - cur.signal;
+  const prevDiff = prev.macd - prev.signal;
+  if (prevDiff <= 0 && curDiff > 0) return "bullish_cross";
+  if (prevDiff >= 0 && curDiff < 0) return "bearish_cross";
+  return null;
+}
+
+/**
+ * Bollinger band state for the latest bar.
+ * - "upper": price within 1% of upper band
+ * - "lower": price within 1% of lower band
+ * - "squeeze": band width (upper-lower)/middle < 0.08 (8%)
+ */
+export function detectBollingerState(prices: number[]): "upper" | "lower" | "squeeze" | null {
+  const bb = calcBollinger(prices, 20, 2);
+  if (!bb) return null;
+  const price = prices[0];
+  const width = (bb.upper - bb.lower) / bb.middle;
+  if (width < 0.08) return "squeeze";
+  if (price >= bb.upper * 0.99) return "upper";
+  if (price <= bb.lower * 1.01) return "lower";
+  return null;
+}
+
+/** True if today's volume is at least `multiplier`x the trailing 20-day average. */
+export function isVolumeSpike(volumes: number[] | undefined, multiplier = 2, period = 20): boolean {
+  if (!volumes || volumes.length < period + 1) return false;
+  const today = volumes[0];
+  const avg = volumes.slice(1, period + 1).reduce((a, b) => a + b, 0) / period;
+  if (avg <= 0) return false;
+  return today >= avg * multiplier;
+}
+
 export type Signal = "AL" | "SAT" | "NÖTR";
 
 export interface StrategyResult {

@@ -7,7 +7,11 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useTheme } from "@/hooks/useTheme";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useNotifications } from "@/hooks/useNotifications";
-import { applyStrategy, strategies, type StrategyId, type Signal, type Timeframe } from "@/lib/indicators";
+import {
+  applyStrategy, strategies, calcRSI, detectEmaCross, detectMacdCross,
+  detectBollingerState, isVolumeSpike, calcMACD,
+  type StrategyId, type Signal, type Timeframe,
+} from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
 import { SignalSummary } from "@/components/SignalSummary";
@@ -15,6 +19,7 @@ import { StockDetailModal } from "@/components/StockDetailModal";
 import { StockSearch } from "@/components/StockSearch";
 import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { QuickFilters, type Preset } from "@/components/QuickFilters";
+import { AdvancedFilters, emptyAdvancedFilters, type AdvancedFilterState } from "@/components/AdvancedFilters";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -66,6 +71,7 @@ const Index = () => {
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [sectorFilter, setSectorFilter] = useState<Sector | "ALL">("ALL");
   const [preset, setPreset] = useState<Preset>(null);
+  const [advFilters, setAdvFilters] = useState<AdvancedFilterState>(emptyAdvancedFilters);
 
   useEffect(() => { try { localStorage.setItem("borsacep-strategy", strategy); } catch {} }, [strategy]);
   useEffect(() => { try { localStorage.setItem("borsacep-signal-filter", signalFilter); } catch {} }, [signalFilter]);
@@ -127,8 +133,51 @@ const Index = () => {
       });
     }
 
+    // Gelişmiş filtreler (RSI / MACD / EMA cross / Bollinger / Hacim)
+    const hasAdv = Object.values(advFilters).some(Boolean);
+    if (hasAdv) {
+      all = all.filter(r => {
+        const stock = stockData.find(s => s.symbol === r.symbol);
+        if (!stock) return false;
+        const prices = stock.prices;
+
+        if (advFilters.rsi) {
+          const rsi = calcRSI(prices);
+          if (rsi == null) return false;
+          if (advFilters.rsi === "oversold" && !(rsi < 30)) return false;
+          if (advFilters.rsi === "overbought" && !(rsi > 70)) return false;
+          if (advFilters.rsi === "neutral" && !(rsi >= 30 && rsi <= 70)) return false;
+        }
+
+        if (advFilters.macd) {
+          if (advFilters.macd === "bullish_cross" || advFilters.macd === "bearish_cross") {
+            if (detectMacdCross(prices) !== advFilters.macd) return false;
+          } else {
+            const m = calcMACD(prices);
+            if (!m) return false;
+            if (advFilters.macd === "positive" && !(m.histogram > 0)) return false;
+            if (advFilters.macd === "negative" && !(m.histogram < 0)) return false;
+          }
+        }
+
+        if (advFilters.emaCross) {
+          if (detectEmaCross(prices, 5, 22) !== advFilters.emaCross) return false;
+        }
+
+        if (advFilters.bollinger) {
+          if (detectBollingerState(prices) !== advFilters.bollinger) return false;
+        }
+
+        if (advFilters.volume === "spike") {
+          if (!isVolumeSpike(stock.volumes, 2, 20)) return false;
+        }
+
+        return true;
+      });
+    }
+
     return all;
-  }, [strategy, stockData, debouncedSearch, sectorFilter, onlyBuy, onlySell, onlyFavorites, isFavorite, preset]);
+  }, [strategy, stockData, debouncedSearch, sectorFilter, onlyBuy, onlySell, onlyFavorites, isFavorite, preset, advFilters]);
 
   // Notification: alert when new AL signals appear
   const prevAlCountRef = useRef<number | null>(null);
@@ -271,6 +320,9 @@ const Index = () => {
           onSectorChange={setSectorFilter}
           onPresetChange={setPreset}
         />
+
+        {/* Advanced Filters: RSI / MACD / EMA / Bollinger / Volume */}
+        <AdvancedFilters value={advFilters} onChange={setAdvFilters} />
 
         {/* Summary */}
         <SignalSummary results={results} />

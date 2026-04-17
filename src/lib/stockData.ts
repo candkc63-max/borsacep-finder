@@ -3,6 +3,7 @@ export interface Stock {
   symbol: string;
   name: string;
   prices: number[]; // last 200 daily close prices (newest first)
+  volumes?: number[]; // last 200 daily volumes (newest first), optional
 }
 
 // Seed random for consistency
@@ -121,12 +122,20 @@ function generateStockData(): Stock[] {
   return bist100Stocks.map((s, idx) => {
     const rng = seededRandom(idx * 1000 + 42);
     const prices: number[] = [];
+    const volumes: number[] = [];
     let price = s.base;
+    // Base average daily volume scaled by stock "size" (lower price ≈ higher share count)
+    const baseVol = Math.round(500_000 + (1000 / Math.max(s.base, 5)) * 250_000);
     for (let i = 0; i < 200; i++) {
-      price = price * (1 + (rng() - 0.5 + s.trend) * s.vol);
+      const move = (rng() - 0.5 + s.trend) * s.vol;
+      price = price * (1 + move);
       prices.push(Math.round(price * 100) / 100);
+      // Volume: base + noise + spikes when |move| is large
+      const spike = 1 + Math.abs(move) * 25 + (rng() < 0.05 ? rng() * 2 : 0);
+      const noise = 0.6 + rng() * 0.8; // 0.6x - 1.4x
+      volumes.push(Math.round(baseVol * noise * spike));
     }
-    return { symbol: s.symbol, name: s.name, prices: prices.reverse() };
+    return { symbol: s.symbol, name: s.name, prices: prices.reverse(), volumes: volumes.reverse() };
   });
 }
 
