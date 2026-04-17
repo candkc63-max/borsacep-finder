@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Stock } from "@/lib/stockData";
 import { setRealFundamentals } from "@/lib/fundamentals";
+import { hasBackend, supabase } from "@/lib/backend";
 
 interface BistResponse {
   stocks: Stock[];
@@ -8,7 +9,6 @@ interface BistResponse {
 }
 
 async function fetchBistStocks(): Promise<Stock[]> {
-  const { supabase } = await import("@/integrations/supabase/client");
   const { data, error } = await supabase.functions.invoke<BistResponse>("bist-stocks");
 
   if (error) {
@@ -36,8 +36,6 @@ async function fetchBistStocks(): Promise<Stock[]> {
 }
 
 export function useBistStocks() {
-  const hasBackend = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
-
   return useQuery({
     queryKey: ["bist-stocks"],
     queryFn: fetchBistStocks,
