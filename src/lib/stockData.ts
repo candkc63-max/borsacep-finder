@@ -3,6 +3,7 @@ export interface Stock {
   symbol: string;
   name: string;
   prices: number[]; // last 200 daily close prices (newest first)
+  volumes?: number[]; // last 200 daily volumes (newest first), optional
 }
 
 // Seed random for consistency
