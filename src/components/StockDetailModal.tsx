@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell, ComposedChart, Area } from "recharts";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TradingViewWidget } from "./TradingViewWidget";
 
 interface StockDetailModalProps {
   open: boolean;
@@ -144,12 +145,20 @@ export function StockDetailModal({ open, onOpenChange, stock, currentStrategy, o
           </div>
         )}
 
-        <Tabs defaultValue="chart" className="mt-2">
+        <Tabs defaultValue="tradingview" className="mt-2">
           <TabsList className="w-full bg-muted">
+            <TabsTrigger value="tradingview" className="flex-1 font-mono text-xs">TradingView</TabsTrigger>
             <TabsTrigger value="chart" className="flex-1 font-mono text-xs">Grafik</TabsTrigger>
             <TabsTrigger value="technicals" className="flex-1 font-mono text-xs">Teknik</TabsTrigger>
             <TabsTrigger value="signals" className="flex-1 font-mono text-xs">Sinyaller</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="tradingview" className="mt-4">
+            <TradingViewWidget symbol={stock.symbol} height={500} />
+            <p className="text-[10px] text-muted-foreground mt-2 font-mono">
+              Profesyonel grafik · TradingView · Mum, indikatör ve çizim araçları
+            </p>
+          </TabsContent>
 
           <TabsContent value="chart" className="mt-4 space-y-4">
             {/* Price Chart with Bollinger Bands */}
