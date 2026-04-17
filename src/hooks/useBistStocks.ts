@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Stock } from "@/lib/stockData";
+import { setRealFundamentals } from "@/lib/fundamentals";
 
 interface BistResponse {
   stocks: Stock[];
@@ -24,6 +25,11 @@ async function fetchBistStocks(): Promise<Stock[]> {
 
   if (!data?.stocks || data.stocks.length === 0) {
     throw new Error("Veri bulunamadı. Piyasa kapalı olabilir.");
+  }
+
+  // Cache real fundamentals so filters use real data
+  for (const s of data.stocks) {
+    if (s.fundamentals) setRealFundamentals(s.symbol, s.fundamentals);
   }
 
   return data.stocks;

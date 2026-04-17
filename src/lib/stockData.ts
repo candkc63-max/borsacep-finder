@@ -4,6 +4,11 @@ export interface Stock {
   name: string;
   prices: number[]; // last 200 daily close prices (newest first)
   volumes?: number[]; // last 200 daily volumes (newest first), optional
+  fundamentals?: {
+    pe: number | null;
+    marketCap: number | null; // milyar TL
+    divYield: number | null;  // %
+  };
 }
 
 // Seed random for consistency

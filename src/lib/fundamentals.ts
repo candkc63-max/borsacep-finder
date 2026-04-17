@@ -1,5 +1,9 @@
-// Mock temel veriler: F/K, piyasa değeri (TL), temettü verimi (%)
-// Gerçek veri kaynağı eklenene kadar deterministik olarak sembolden üretilir.
+// Temel veriler: F/K, piyasa değeri (milyar TL), temettü verimi (%)
+// Veri Yahoo Finance (RapidAPI) üzerinden edge function ile çekilir.
+// API verisi yoksa deterministik fallback kullanılır.
+
+import { getIndexMemberships } from "./indices";
+import { stocks as mockStocks } from "./stockData";
 
 export type MarketCapBucket = "small" | "mid" | "large";
 export type PeBucket = "low" | "mid" | "high"; // <10, 10-20, >20
@@ -17,34 +21,40 @@ function hash(s: string): number {
   return h;
 }
 
-// BIST30 sembolleri büyük cap, BIST50 ek mid, geri kalan small (basit varsayım)
-import { getIndexMemberships } from "./indices";
-
-export function getFundamentals(symbol: string): Fundamentals {
+function fallbackFundamentals(symbol: string): Fundamentals {
   const h = hash(symbol);
   const memberships = getIndexMemberships(symbol);
-
-  // Piyasa değeri (milyar TL)
   let marketCap: number;
-  if (memberships.includes("BIST30")) {
-    marketCap = 80 + (h % 420); // 80-500B
-  } else if (memberships.includes("BIST50")) {
-    marketCap = 20 + (h % 60);  // 20-80B
-  } else {
-    marketCap = 1 + (h % 19);   // 1-20B
-  }
-
-  // F/K
-  const peBase = (h >> 3) % 100; // 0-99
-  const pe = Math.round((4 + (peBase / 100) * 36) * 10) / 10; // 4 - 40
-
-  // Temettü verimi (%)
+  if (memberships.includes("BIST30")) marketCap = 80 + (h % 420);
+  else if (memberships.includes("BIST50")) marketCap = 20 + (h % 60);
+  else marketCap = 1 + (h % 19);
+  const peBase = (h >> 3) % 100;
+  const pe = Math.round((4 + (peBase / 100) * 36) * 10) / 10;
   const dvBase = (h >> 5) % 100;
-  // %30 ihtimal temettü yok
-  const divYield = dvBase < 30 ? 0 : Math.round(((dvBase - 30) / 70) * 90) / 10; // 0 - 9.0
-
+  const divYield = dvBase < 30 ? 0 : Math.round(((dvBase - 30) / 70) * 90) / 10;
   return { pe, marketCap, divYield };
 }
+
+// Runtime cache for real API data set by the data hook
+const realDataCache = new Map<string, Partial<Fundamentals>>();
+
+export function setRealFundamentals(symbol: string, f: Partial<Fundamentals>) {
+  realDataCache.set(symbol, f);
+}
+
+export function getFundamentals(symbol: string): Fundamentals {
+  const fb = fallbackFundamentals(symbol);
+  const real = realDataCache.get(symbol);
+  if (!real) return fb;
+  return {
+    pe: real.pe ?? fb.pe,
+    marketCap: real.marketCap ?? fb.marketCap,
+    divYield: real.divYield ?? fb.divYield,
+  };
+}
+
+// Suppress unused import warning - kept for potential future use
+void mockStocks;
 
 export function getMarketCapBucket(marketCap: number): MarketCapBucket {
   if (marketCap >= 50) return "large";
