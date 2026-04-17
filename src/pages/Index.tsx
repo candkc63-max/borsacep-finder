@@ -133,8 +133,51 @@ const Index = () => {
       });
     }
 
+    // Gelişmiş filtreler (RSI / MACD / EMA cross / Bollinger / Hacim)
+    const hasAdv = Object.values(advFilters).some(Boolean);
+    if (hasAdv) {
+      all = all.filter(r => {
+        const stock = stockData.find(s => s.symbol === r.symbol);
+        if (!stock) return false;
+        const prices = stock.prices;
+
+        if (advFilters.rsi) {
+          const rsi = calcRSI(prices);
+          if (rsi == null) return false;
+          if (advFilters.rsi === "oversold" && !(rsi < 30)) return false;
+          if (advFilters.rsi === "overbought" && !(rsi > 70)) return false;
+          if (advFilters.rsi === "neutral" && !(rsi >= 30 && rsi <= 70)) return false;
+        }
+
+        if (advFilters.macd) {
+          if (advFilters.macd === "bullish_cross" || advFilters.macd === "bearish_cross") {
+            if (detectMacdCross(prices) !== advFilters.macd) return false;
+          } else {
+            const m = calcMACD(prices);
+            if (!m) return false;
+            if (advFilters.macd === "positive" && !(m.histogram > 0)) return false;
+            if (advFilters.macd === "negative" && !(m.histogram < 0)) return false;
+          }
+        }
+
+        if (advFilters.emaCross) {
+          if (detectEmaCross(prices, 5, 22) !== advFilters.emaCross) return false;
+        }
+
+        if (advFilters.bollinger) {
+          if (detectBollingerState(prices) !== advFilters.bollinger) return false;
+        }
+
+        if (advFilters.volume === "spike") {
+          if (!isVolumeSpike(stock.volumes, 2, 20)) return false;
+        }
+
+        return true;
+      });
+    }
+
     return all;
-  }, [strategy, stockData, debouncedSearch, sectorFilter, onlyBuy, onlySell, onlyFavorites, isFavorite, preset]);
+  }, [strategy, stockData, debouncedSearch, sectorFilter, onlyBuy, onlySell, onlyFavorites, isFavorite, preset, advFilters]);
 
   // Notification: alert when new AL signals appear
   const prevAlCountRef = useRef<number | null>(null);
