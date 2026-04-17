@@ -321,6 +321,9 @@ const Index = () => {
           onPresetChange={setPreset}
         />
 
+        {/* Advanced Filters: RSI / MACD / EMA / Bollinger / Volume */}
+        <AdvancedFilters value={advFilters} onChange={setAdvFilters} />
+
         {/* Summary */}
         <SignalSummary results={results} />
 
