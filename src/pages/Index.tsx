@@ -61,6 +61,11 @@ const Index = () => {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [onlyBuy, setOnlyBuy] = useState(false);
+  const [onlySell, setOnlySell] = useState(false);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [sectorFilter, setSectorFilter] = useState<Sector | "ALL">("ALL");
+  const [preset, setPreset] = useState<Preset>(null);
 
   useEffect(() => { try { localStorage.setItem("borsacep-strategy", strategy); } catch {} }, [strategy]);
   useEffect(() => { try { localStorage.setItem("borsacep-signal-filter", signalFilter); } catch {} }, [signalFilter]);
