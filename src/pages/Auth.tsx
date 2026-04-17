@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,9 +14,14 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const hasBackend = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasBackend) {
+      toast.error("Giriş sistemi şu anda kullanılamıyor.");
+      return;
+    }
     if (!email.trim() || !password.trim()) {
       toast.error("E-posta ve şifre gerekli");
       return;
@@ -34,6 +38,7 @@ const Auth = () => {
 
     setLoading(true);
     try {
+      const { supabase } = await import("@/integrations/supabase/client");
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -59,6 +64,11 @@ const Auth = () => {
   };
 
   const handleGoogleLogin = async () => {
+    if (!hasBackend) {
+      toast.error("Google ile giriş şu anda kullanılamıyor.");
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await lovable.auth.signInWithOAuth("google", {
@@ -95,7 +105,7 @@ const Auth = () => {
           variant="outline"
           className="w-full h-11 font-medium"
           onClick={handleGoogleLogin}
-          disabled={loading}
+          disabled={loading || !hasBackend}
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" aria-label="Google logo" role="img">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -136,11 +146,13 @@ const Auth = () => {
               <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••" className="pl-10" minLength={6} required />
             </div>
           </div>
-          <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
+          <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !hasBackend}>
             {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {isLogin ? "Giriş Yap" : "Üye Ol"}
           </Button>
         </form>
+
+        {!hasBackend && <p className="text-center text-xs text-muted-foreground">Kimlik doğrulama geçici olarak devre dışı.</p>}
 
         <p className="text-center text-sm text-muted-foreground">
           {isLogin ? "Hesabınız yok mu?" : "Zaten üye misiniz?"}{" "}
