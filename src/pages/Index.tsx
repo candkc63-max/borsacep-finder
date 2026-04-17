@@ -14,9 +14,11 @@ import { SignalSummary } from "@/components/SignalSummary";
 import { StockDetailModal } from "@/components/StockDetailModal";
 import { StockSearch } from "@/components/StockSearch";
 import { PortfolioPanel } from "@/components/PortfolioPanel";
+import { QuickFilters, type Preset } from "@/components/QuickFilters";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getSector, type Sector } from "@/lib/sectors";
 import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock } from "lucide-react";
 
 const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
