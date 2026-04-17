@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Activity, Mail, Lock, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { hasBackend, supabase } from "@/lib/backend";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -13,7 +14,6 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const hasBackend = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +37,6 @@ const Auth = () => {
 
     setLoading(true);
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;

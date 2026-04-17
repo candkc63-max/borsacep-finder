@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import type { User } from "@supabase/supabase-js";
+import { hasBackend, supabase } from "@/lib/backend";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const hasBackend = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
 
   useEffect(() => {
     let isMounted = true;
@@ -17,24 +17,19 @@ export function useAuth() {
       return;
     }
 
-    import("@/integrations/supabase/client")
-      .then(({ supabase }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    unsubscribe = () => subscription.unsubscribe();
+
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
         if (!isMounted) return;
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-          if (!isMounted) return;
-          setUser(session?.user ?? null);
-          setLoading(false);
-        });
-
-        unsubscribe = () => subscription.unsubscribe();
-
-        return supabase.auth.getSession()
-          .then(({ data: { session } }) => {
-            if (!isMounted) return;
-            setUser(session?.user ?? null);
-            setLoading(false);
-          });
+        setUser(session?.user ?? null);
+        setLoading(false);
       })
       .catch(() => {
         if (!isMounted) return;
@@ -55,7 +50,6 @@ export function useAuth() {
     }
 
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch {
