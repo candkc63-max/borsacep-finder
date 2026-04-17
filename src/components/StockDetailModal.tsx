@@ -145,7 +145,7 @@ export function StockDetailModal({ open, onOpenChange, stock, currentStrategy, o
           </div>
         )}
 
-        <Tabs defaultValue="chart" className="mt-2">
+        <Tabs defaultValue="tradingview" className="mt-2">
           <TabsList className="w-full bg-muted">
             <TabsTrigger value="tradingview" className="flex-1 font-mono text-xs">TradingView</TabsTrigger>
             <TabsTrigger value="chart" className="flex-1 font-mono text-xs">Grafik</TabsTrigger>
