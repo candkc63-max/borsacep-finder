@@ -258,6 +258,20 @@ const Index = () => {
           <StrategySelector selected={strategy} onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }} strategies={filteredStrategies} />
         </section>
 
+        {/* Quick Filters: presets + AL/SAT/Favoriler + Sektör */}
+        <QuickFilters
+          onlyBuy={onlyBuy}
+          onlySell={onlySell}
+          onlyFavorites={onlyFavorites}
+          sector={sectorFilter}
+          preset={preset}
+          onToggleBuy={() => { setOnlyBuy(v => !v); if (!onlyBuy) setOnlySell(false); }}
+          onToggleSell={() => { setOnlySell(v => !v); if (!onlySell) setOnlyBuy(false); }}
+          onToggleFavorites={() => setOnlyFavorites(v => !v)}
+          onSectorChange={setSectorFilter}
+          onPresetChange={setPreset}
+        />
+
         {/* Summary */}
         <SignalSummary results={results} />
 
