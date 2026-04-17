@@ -24,6 +24,7 @@ import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
+import { isInIndex } from "@/lib/indices";
 import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock } from "lucide-react";
 
 const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
@@ -170,6 +171,10 @@ const Index = () => {
 
         if (advFilters.volume === "spike") {
           if (!isVolumeSpike(stock.volumes, 2, 20)) return false;
+        }
+
+        if (advFilters.index) {
+          if (!isInIndex(r.symbol, advFilters.index)) return false;
         }
 
         return true;

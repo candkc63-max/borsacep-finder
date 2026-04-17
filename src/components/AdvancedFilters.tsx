@@ -7,6 +7,7 @@ export type MacdSignal = "bullish_cross" | "bearish_cross" | "positive" | "negat
 export type EmaCrossSignal = "golden" | "death" | null;
 export type BollingerSignal = "upper" | "lower" | "squeeze" | null;
 export type VolumeSignal = "spike" | null;
+export type IndexFilter = "BIST30" | "BIST50" | "BIST100" | "YILDIZ" | null;
 
 export interface AdvancedFilterState {
   rsi: RsiZone;
@@ -14,10 +15,11 @@ export interface AdvancedFilterState {
   emaCross: EmaCrossSignal;
   bollinger: BollingerSignal;
   volume: VolumeSignal;
+  index: IndexFilter;
 }
 
 export const emptyAdvancedFilters: AdvancedFilterState = {
-  rsi: null, macd: null, emaCross: null, bollinger: null, volume: null,
+  rsi: null, macd: null, emaCross: null, bollinger: null, volume: null, index: null,
 };
 
 interface Props {
@@ -73,6 +75,16 @@ const groups: Group<keyof AdvancedFilterState>[] = [
     label: "Hacim",
     options: [
       { value: "spike", label: "Patlama (20G ort. ≥ 2x)", cls: "border-yellow-500 text-yellow-500 bg-yellow-500/10" },
+    ],
+  },
+  {
+    key: "index",
+    label: "Endeks Üyeliği",
+    options: [
+      { value: "BIST30", label: "BIST 30", cls: "border-primary text-primary bg-primary/10" },
+      { value: "BIST50", label: "BIST 50", cls: "border-primary text-primary bg-primary/10" },
+      { value: "BIST100", label: "BIST 100", cls: "border-primary text-primary bg-primary/10" },
+      { value: "YILDIZ", label: "Yıldız Pazar", cls: "border-yellow-500 text-yellow-500 bg-yellow-500/10" },
     ],
   },
 ];
