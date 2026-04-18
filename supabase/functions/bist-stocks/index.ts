@@ -3,7 +3,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Full BIST100 stock symbols
 const BIST100_SYMBOLS = [
   "THYAO","GARAN","AKBNK","EREGL","KCHOL","SAHOL","SISE","TUPRS","YKBNK","BIMAS",
   "ASELS","PGSUS","TCELL","TOASO","FROTO","ARCLK","HEKTS","KOZAL","KOZAA","PETKM",
@@ -45,8 +44,8 @@ const STOCK_NAMES: Record<string, string> = {
   ERBOS:"Erbosan",FENER:"Fenerbahçe Futbol",GEDZA:"Gediz Ambalaj",HUBGL:"Hub Girişim"
 };
 
-const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY");
-const FINNHUB_BASE = "https://finnhub.io/api/v1";
+const EODHD_KEY = Deno.env.get("EODHD_API_KEY");
+const EODHD_BASE = "https://eodhd.com/api";
 
 interface Fundamentals {
   pe: number | null;
@@ -54,51 +53,62 @@ interface Fundamentals {
   divYield: number | null;  // %
 }
 
-// Yahoo fallback for historical prices (Finnhub free tier doesn't include candles for IS)
-async function fetchYahooData(symbol: string): Promise<number[] | null> {
+function isoDaysAgo(days: number): string {
+  const d = new Date(Date.now() - days * 86400_000);
+  return d.toISOString().slice(0, 10);
+}
+
+// EOD historical end-of-day prices for BIST (.IS)
+async function fetchEodPrices(symbol: string): Promise<number[] | null> {
+  if (!EODHD_KEY) return null;
   try {
-    const yahooSymbol = `${symbol}.IS`;
-    const now = Math.floor(Date.now() / 1000);
-    const from = now - 86400 * 300;
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${from}&period2=${now}&interval=1d`;
-    const resp = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!resp.ok) return null;
+    const eodSymbol = `${symbol}.IS`;
+    const from = isoDaysAgo(300);
+    const to = isoDaysAgo(0);
+    const url = `${EODHD_BASE}/eod/${eodSymbol}?api_token=${EODHD_KEY}&fmt=json&from=${from}&to=${to}&period=d`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!resp.ok) {
+      console.error(`EOD prices error ${symbol}: ${resp.status}`);
+      return null;
+    }
     const data = await resp.json();
-    const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-    if (!closes || !Array.isArray(closes)) return null;
-    const valid = closes.filter((c: number | null) => c !== null) as number[];
-    return valid.reverse().slice(0, 200);
+    if (!Array.isArray(data) || data.length === 0) return null;
+    // EOD returns ascending by date; we want most-recent first, last 200
+    const closes = data
+      .map((d: { close?: number; adjusted_close?: number }) =>
+        typeof d.adjusted_close === "number" ? d.adjusted_close : d.close
+      )
+      .filter((c): c is number => typeof c === "number");
+    return closes.reverse().slice(0, 200);
   } catch (err) {
-    console.error(`Yahoo error ${symbol}:`, err);
+    console.error(`EOD prices exception ${symbol}:`, err);
     return null;
   }
 }
 
-async function fetchFinnhubFundamentals(symbol: string): Promise<Fundamentals> {
+// EOD fundamentals: PE, MarketCap, DividendYield
+async function fetchEodFundamentals(symbol: string): Promise<Fundamentals> {
   const empty: Fundamentals = { pe: null, marketCap: null, divYield: null };
-  if (!FINNHUB_KEY) return empty;
+  if (!EODHD_KEY) return empty;
   try {
-    const finnhubSymbol = `${symbol}.IS`;
-    const url = `${FINNHUB_BASE}/stock/metric?symbol=${finnhubSymbol}&metric=all&token=${FINNHUB_KEY}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+    const eodSymbol = `${symbol}.IS`;
+    const url = `${EODHD_BASE}/fundamentals/${eodSymbol}?api_token=${EODHD_KEY}&filter=Highlights`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     if (!resp.ok) {
-      console.error(`Finnhub fundamentals error for ${symbol}: ${resp.status}`);
+      // 404 is common for some BIST tickers without coverage
       return empty;
     }
-    const data = await resp.json();
-    const m = data?.metric || {};
-    const pe = typeof m.peTTM === "number" ? m.peTTM : (typeof m.peNormalizedAnnual === "number" ? m.peNormalizedAnnual : null);
-    // Finnhub marketCapitalization is in millions (USD or local)
-    const mcRaw = typeof m.marketCapitalization === "number" ? m.marketCapitalization : null;
-    const marketCap = mcRaw ? Math.round((mcRaw / 1000) * 10) / 10 : null; // milyon -> milyar
-    const dy = typeof m.dividendYieldIndicatedAnnual === "number" ? m.dividendYieldIndicatedAnnual : null;
-    const divYield = dy !== null ? Math.round(dy * 10) / 10 : null;
+    const h = await resp.json();
+    const pe = typeof h?.PERatio === "number" ? h.PERatio : null;
+    // EOD MarketCapitalization is in local currency (TL). Convert to milyar TL.
+    const mcRaw = typeof h?.MarketCapitalization === "number" ? h.MarketCapitalization : null;
+    const marketCap = mcRaw ? Math.round((mcRaw / 1_000_000_000) * 10) / 10 : null;
+    const dy = typeof h?.DividendYield === "number" ? h.DividendYield : null;
+    // EOD DividendYield is decimal (e.g. 0.045). Convert to %.
+    const divYield = dy !== null ? Math.round(dy * 1000) / 10 : null;
     return { pe, marketCap, divYield };
   } catch (err) {
-    console.error(`Finnhub fundamentals exception ${symbol}:`, err);
+    console.error(`EOD fundamentals exception ${symbol}:`, err);
     return empty;
   }
 }
@@ -109,15 +119,23 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (!EODHD_KEY) {
+      return new Response(
+        JSON.stringify({ error: "EODHD_API_KEY is not configured" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
+    }
+
     const results: Array<{ symbol: string; name: string; prices: number[]; fundamentals: Fundamentals }> = [];
 
+    // 10 paralel istek; EOD dakikada 1000+ izin verir, sorun olmaz
     for (let i = 0; i < BIST100_SYMBOLS.length; i += 10) {
       const batch = BIST100_SYMBOLS.slice(i, i + 10);
       const batchResults = await Promise.all(
         batch.map(async (symbol) => {
           const [prices, fundamentals] = await Promise.all([
-            fetchYahooData(symbol),
-            fetchFinnhubFundamentals(symbol),
+            fetchEodPrices(symbol),
+            fetchEodFundamentals(symbol),
           ]);
           if (prices && prices.length >= 50) {
             return { symbol, name: STOCK_NAMES[symbol] || symbol, prices, fundamentals };
