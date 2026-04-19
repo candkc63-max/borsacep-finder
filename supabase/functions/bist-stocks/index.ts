@@ -5,15 +5,15 @@ const corsHeaders = {
 
 const BIST100_SYMBOLS = [
   "THYAO","GARAN","AKBNK","EREGL","KCHOL","SAHOL","SISE","TUPRS","YKBNK","BIMAS",
-  "ASELS","PGSUS","TCELL","TOASO","FROTO","ARCLK","HEKTS","KOZAL","KOZAA","PETKM",
+  "ASELS","PGSUS","TCELL","TOASO","FROTO","ARCLK","HEKTS","PETKM",
   "TAVHL","VESTL","DOHOL","EKGYO","TTKOM","SASA","ENKAI","MGROS","SOKM","GUBRF",
   "TKFEN","ISCTR","VAKBN","HALKB","ISGYO","AEFES","ULKER","CCOLA","OTKAR","KORDS",
-  "AKSA","ALARK","ANACM","ANHYT","AYGAZ","BAGFS","BRISA","BRYAT","BUCIM","CEMTS",
+  "AKSA","ALARK","ANHYT","AYGAZ","BAGFS","BRISA","BRYAT","BUCIM","CEMTS",
   "CIMSA","DOAS","ECILC","EGEEN","ENJSA","GLYHO","GESAN","GOLTS","GOODY","GSDHO",
-  "IPEKE","KAREL","KARSN","KARTN","KLRHO","KONTR","LOGO","MAVI","MPARK","NETAS",
+  "KAREL","KARSN","KARTN","KLRHO","KONTR","LOGO","MAVI","MPARK","NETAS",
   "ODAS","OYAKC","PAPIL","PRKME","QUAGR","SARKY","SELEC","SMRTG","SNGYO","TATGD",
   "TKNSA","TMSN","TRGYO","TTRAK","TURSG","ULUUN","VERUS","VESBE","YATAS","YUNSA",
-  "ZOREN","AKSEN","BERA","BTCIM","CEMAS","DESA","ERBOS","FENER","GEDZA","HUBGL"
+  "ZOREN","AKSEN","BERA","BTCIM","CEMAS","DESA","ERBOS","FENER","GEDZA"
 ];
 
 const STOCK_NAMES: Record<string, string> = {
@@ -73,7 +73,7 @@ async function fetchYahooPrices(symbol: string): Promise<{ prices: number[]; vol
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
         "Accept": "application/json",
       },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(8_000),
     });
     if (!resp.ok) {
       console.error(`Yahoo HTTP ${resp.status} for ${symbol}`);
@@ -123,8 +123,8 @@ Deno.serve(async (req) => {
     const results: Array<{ symbol: string; name: string; prices: number[]; volumes: number[]; fundamentals: Fundamentals }> = [];
 
     // Yahoo has no hard rate limit, but we batch in 10s of 10 to be polite (~10s total)
-    const BATCH_SIZE = 10;
-    const BATCH_DELAY_MS = 200;
+    const BATCH_SIZE = 25;
+    const BATCH_DELAY_MS = 100;
 
     for (let i = 0; i < BIST100_SYMBOLS.length; i += BATCH_SIZE) {
       const batch = BIST100_SYMBOLS.slice(i, i + BATCH_SIZE);
