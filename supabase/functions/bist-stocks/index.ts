@@ -44,46 +44,71 @@ const STOCK_NAMES: Record<string, string> = {
   ERBOS:"Erbosan",FENER:"Fenerbahçe Futbol",GEDZA:"Gediz Ambalaj",HUBGL:"Hub Girişim"
 };
 
-const TD_KEY = Deno.env.get("TWELVE_DATA_API_KEY");
-const TD_BASE = "https://api.twelvedata.com";
-
 interface Fundamentals {
   pe: number | null;
   marketCap: number | null;
   divYield: number | null;
 }
 
-// Twelve Data: BIST symbol format is `SYMBOL:BIST` (e.g. "THYAO:BIST")
-async function fetchTdPrices(symbol: string): Promise<number[] | null> {
-  if (!TD_KEY) return null;
+interface YahooChartResponse {
+  chart?: {
+    result?: Array<{
+      indicators?: {
+        quote?: Array<{
+          close?: (number | null)[];
+          volume?: (number | null)[];
+        }>;
+      };
+    }>;
+    error?: { description?: string } | null;
+  };
+}
+
+// Yahoo Finance: BIST symbols use `.IS` suffix (e.g. THYAO.IS)
+async function fetchYahooPrices(symbol: string): Promise<{ prices: number[]; volumes: number[] } | null> {
   try {
-    const tdSymbol = `${symbol}:BIST`;
-    const url = `${TD_BASE}/time_series?symbol=${encodeURIComponent(tdSymbol)}&interval=1day&outputsize=200&apikey=${TD_KEY}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1d&range=1y`;
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept": "application/json",
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!resp.ok) {
-      console.error(`TD prices HTTP error ${symbol}: ${resp.status}`);
+      console.error(`Yahoo HTTP ${resp.status} for ${symbol}`);
       return null;
     }
-    const data = await resp.json();
-    if (data?.status === "error") {
-      console.error(`TD prices error ${symbol}: ${data?.message}`);
+    const data: YahooChartResponse = await resp.json();
+    if (data?.chart?.error) {
+      console.error(`Yahoo error ${symbol}:`, data.chart.error);
       return null;
     }
-    const values = data?.values;
-    if (!Array.isArray(values) || values.length === 0) return null;
-    // Twelve Data returns most-recent first. Convert to oldest-first for indicator calc compatibility,
-    // but useBistStocks expects descending (most-recent first). Match prior EOD behavior: most-recent first.
-    const closes = values
-      .map((v: { close?: string }) => (v.close ? parseFloat(v.close) : NaN))
-      .filter((c: number) => Number.isFinite(c));
-    return closes.slice(0, 200);
+    const result = data?.chart?.result?.[0];
+    const quote = result?.indicators?.quote?.[0];
+    const closesRaw = quote?.close;
+    const volumesRaw = quote?.volume;
+    if (!Array.isArray(closesRaw)) return null;
+
+    // Filter null entries (non-trading days), keep aligned closes/volumes, then reverse to newest-first
+    const closes: number[] = [];
+    const volumes: number[] = [];
+    for (let i = 0; i < closesRaw.length; i++) {
+      const c = closesRaw[i];
+      if (typeof c === "number" && Number.isFinite(c)) {
+        closes.push(c);
+        const v = volumesRaw?.[i];
+        volumes.push(typeof v === "number" && Number.isFinite(v) ? v : 0);
+      }
+    }
+    if (closes.length === 0) return null;
+    return { prices: closes.reverse().slice(0, 200), volumes: volumes.reverse().slice(0, 200) };
   } catch (err) {
-    console.error(`TD prices exception ${symbol}:`, err);
+    console.error(`Yahoo exception ${symbol}:`, err);
     return null;
   }
 }
 
-// Free plan limit: 8 req/min. Sleep helper for batch pacing.
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -94,30 +119,26 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!TD_KEY) {
-      return new Response(
-        JSON.stringify({ error: "TWELVE_DATA_API_KEY is not configured" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
-    }
-
     const emptyFundamentals: Fundamentals = { pe: null, marketCap: null, divYield: null };
-    const results: Array<{ symbol: string; name: string; prices: number[]; fundamentals: Fundamentals }> = [];
+    const results: Array<{ symbol: string; name: string; prices: number[]; volumes: number[]; fundamentals: Fundamentals }> = [];
 
-    // Free plan: 8 req/min. We send batches of 6 then wait ~60s. That's slow (~16 min for 100 symbols).
-    // To stay responsive, cap at first 24 symbols per call (4 batches, ~3.5 min) — adjust as needed.
-    // For full coverage, recommend upgrading Twelve Data plan.
-    const BATCH_SIZE = 6;
-    const BATCH_DELAY_MS = 61_000;
-    const MAX_SYMBOLS = BIST100_SYMBOLS.length; // process all; will be slow on free tier
+    // Yahoo has no hard rate limit, but we batch in 10s of 10 to be polite (~10s total)
+    const BATCH_SIZE = 10;
+    const BATCH_DELAY_MS = 200;
 
-    for (let i = 0; i < MAX_SYMBOLS; i += BATCH_SIZE) {
+    for (let i = 0; i < BIST100_SYMBOLS.length; i += BATCH_SIZE) {
       const batch = BIST100_SYMBOLS.slice(i, i + BATCH_SIZE);
       const batchResults = await Promise.all(
         batch.map(async (symbol) => {
-          const prices = await fetchTdPrices(symbol);
-          if (prices && prices.length >= 50) {
-            return { symbol, name: STOCK_NAMES[symbol] || symbol, prices, fundamentals: emptyFundamentals };
+          const data = await fetchYahooPrices(symbol);
+          if (data && data.prices.length >= 50) {
+            return {
+              symbol,
+              name: STOCK_NAMES[symbol] || symbol,
+              prices: data.prices,
+              volumes: data.volumes,
+              fundamentals: emptyFundamentals,
+            };
           }
           return null;
         })
@@ -125,10 +146,12 @@ Deno.serve(async (req) => {
       for (const r of batchResults) {
         if (r) results.push(r);
       }
-      if (i + BATCH_SIZE < MAX_SYMBOLS) {
+      if (i + BATCH_SIZE < BIST100_SYMBOLS.length) {
         await sleep(BATCH_DELAY_MS);
       }
     }
+
+    console.log(`Yahoo fetch complete: ${results.length}/${BIST100_SYMBOLS.length} symbols`);
 
     return new Response(JSON.stringify({ stocks: results, timestamp: Date.now() }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
