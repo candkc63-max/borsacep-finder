@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
+import Egitmen from "./pages/Egitmen.tsx";
 import Gizlilik from "./pages/Gizlilik.tsx";
 import KullanimKosullari from "./pages/KullanimKosullari.tsx";
 import Kvkk from "./pages/Kvkk.tsx";
@@ -23,6 +24,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/egitmen" element={<Egitmen />} />
             <Route path="/gizlilik" element={<Gizlilik />} />
             <Route path="/kullanim-kosullari" element={<KullanimKosullari />} />
             <Route path="/kvkk" element={<Kvkk />} />

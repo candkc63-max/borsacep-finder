@@ -21,6 +21,7 @@ import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { QuickFilters, type Preset } from "@/components/QuickFilters";
 import { AdvancedFilters, emptyAdvancedFilters, type AdvancedFilterState } from "@/components/AdvancedFilters";
 import { Footer } from "@/components/Footer";
+import { EgitmenFloatingButton } from "@/components/EgitmenFloatingButton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
@@ -405,6 +406,8 @@ const Index = () => {
         currentStrategy={strategy}
         onAddToPortfolio={addToPortfolio}
       />
+
+      <EgitmenFloatingButton />
     </div>
   );
 };
