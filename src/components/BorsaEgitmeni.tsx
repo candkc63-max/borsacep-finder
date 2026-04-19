@@ -129,7 +129,7 @@ export function BorsaEgitmeni({ embedded = false }: Props) {
         <div>
           <h2 className="text-sm font-medium text-foreground leading-tight">Borsa Eğitmeni</h2>
           <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" />
             Aktif · Teknik Analiz & Risk Yönetimi
           </p>
         </div>
