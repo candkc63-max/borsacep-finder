@@ -44,73 +44,48 @@ const STOCK_NAMES: Record<string, string> = {
   ERBOS:"Erbosan",FENER:"Fenerbahçe Futbol",GEDZA:"Gediz Ambalaj",HUBGL:"Hub Girişim"
 };
 
-const EODHD_KEY = Deno.env.get("EODHD_API_KEY");
-const EODHD_BASE = "https://eodhd.com/api";
+const TD_KEY = Deno.env.get("TWELVE_DATA_API_KEY");
+const TD_BASE = "https://api.twelvedata.com";
 
 interface Fundamentals {
   pe: number | null;
-  marketCap: number | null; // milyar TL
-  divYield: number | null;  // %
+  marketCap: number | null;
+  divYield: number | null;
 }
 
-function isoDaysAgo(days: number): string {
-  const d = new Date(Date.now() - days * 86400_000);
-  return d.toISOString().slice(0, 10);
-}
-
-// EOD historical end-of-day prices for BIST (.IS)
-async function fetchEodPrices(symbol: string): Promise<number[] | null> {
-  if (!EODHD_KEY) return null;
+// Twelve Data: BIST symbol format is `SYMBOL:BIST` (e.g. "THYAO:BIST")
+async function fetchTdPrices(symbol: string): Promise<number[] | null> {
+  if (!TD_KEY) return null;
   try {
-    const eodSymbol = `${symbol}.IS`;
-    const from = isoDaysAgo(300);
-    const to = isoDaysAgo(0);
-    const url = `${EODHD_BASE}/eod/${eodSymbol}?api_token=${EODHD_KEY}&fmt=json&from=${from}&to=${to}&period=d`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    const tdSymbol = `${symbol}:BIST`;
+    const url = `${TD_BASE}/time_series?symbol=${encodeURIComponent(tdSymbol)}&interval=1day&outputsize=200&apikey=${TD_KEY}`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!resp.ok) {
-      console.error(`EOD prices error ${symbol}: ${resp.status}`);
+      console.error(`TD prices HTTP error ${symbol}: ${resp.status}`);
       return null;
     }
     const data = await resp.json();
-    if (!Array.isArray(data) || data.length === 0) return null;
-    // EOD returns ascending by date; we want most-recent first, last 200
-    const closes = data
-      .map((d: { close?: number; adjusted_close?: number }) =>
-        typeof d.adjusted_close === "number" ? d.adjusted_close : d.close
-      )
-      .filter((c): c is number => typeof c === "number");
-    return closes.reverse().slice(0, 200);
+    if (data?.status === "error") {
+      console.error(`TD prices error ${symbol}: ${data?.message}`);
+      return null;
+    }
+    const values = data?.values;
+    if (!Array.isArray(values) || values.length === 0) return null;
+    // Twelve Data returns most-recent first. Convert to oldest-first for indicator calc compatibility,
+    // but useBistStocks expects descending (most-recent first). Match prior EOD behavior: most-recent first.
+    const closes = values
+      .map((v: { close?: string }) => (v.close ? parseFloat(v.close) : NaN))
+      .filter((c: number) => Number.isFinite(c));
+    return closes.slice(0, 200);
   } catch (err) {
-    console.error(`EOD prices exception ${symbol}:`, err);
+    console.error(`TD prices exception ${symbol}:`, err);
     return null;
   }
 }
 
-// EOD fundamentals: PE, MarketCap, DividendYield
-async function fetchEodFundamentals(symbol: string): Promise<Fundamentals> {
-  const empty: Fundamentals = { pe: null, marketCap: null, divYield: null };
-  if (!EODHD_KEY) return empty;
-  try {
-    const eodSymbol = `${symbol}.IS`;
-    const url = `${EODHD_BASE}/fundamentals/${eodSymbol}?api_token=${EODHD_KEY}&filter=Highlights`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (!resp.ok) {
-      // 404 is common for some BIST tickers without coverage
-      return empty;
-    }
-    const h = await resp.json();
-    const pe = typeof h?.PERatio === "number" ? h.PERatio : null;
-    // EOD MarketCapitalization is in local currency (TL). Convert to milyar TL.
-    const mcRaw = typeof h?.MarketCapitalization === "number" ? h.MarketCapitalization : null;
-    const marketCap = mcRaw ? Math.round((mcRaw / 1_000_000_000) * 10) / 10 : null;
-    const dy = typeof h?.DividendYield === "number" ? h.DividendYield : null;
-    // EOD DividendYield is decimal (e.g. 0.045). Convert to %.
-    const divYield = dy !== null ? Math.round(dy * 1000) / 10 : null;
-    return { pe, marketCap, divYield };
-  } catch (err) {
-    console.error(`EOD fundamentals exception ${symbol}:`, err);
-    return empty;
-  }
+// Free plan limit: 8 req/min. Sleep helper for batch pacing.
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 Deno.serve(async (req) => {
@@ -119,32 +94,39 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!EODHD_KEY) {
+    if (!TD_KEY) {
       return new Response(
-        JSON.stringify({ error: "EODHD_API_KEY is not configured" }),
+        JSON.stringify({ error: "TWELVE_DATA_API_KEY is not configured" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
       );
     }
 
+    const emptyFundamentals: Fundamentals = { pe: null, marketCap: null, divYield: null };
     const results: Array<{ symbol: string; name: string; prices: number[]; fundamentals: Fundamentals }> = [];
 
-    // 10 paralel istek; EOD dakikada 1000+ izin verir, sorun olmaz
-    for (let i = 0; i < BIST100_SYMBOLS.length; i += 10) {
-      const batch = BIST100_SYMBOLS.slice(i, i + 10);
+    // Free plan: 8 req/min. We send batches of 6 then wait ~60s. That's slow (~16 min for 100 symbols).
+    // To stay responsive, cap at first 24 symbols per call (4 batches, ~3.5 min) — adjust as needed.
+    // For full coverage, recommend upgrading Twelve Data plan.
+    const BATCH_SIZE = 6;
+    const BATCH_DELAY_MS = 61_000;
+    const MAX_SYMBOLS = BIST100_SYMBOLS.length; // process all; will be slow on free tier
+
+    for (let i = 0; i < MAX_SYMBOLS; i += BATCH_SIZE) {
+      const batch = BIST100_SYMBOLS.slice(i, i + BATCH_SIZE);
       const batchResults = await Promise.all(
         batch.map(async (symbol) => {
-          const [prices, fundamentals] = await Promise.all([
-            fetchEodPrices(symbol),
-            fetchEodFundamentals(symbol),
-          ]);
+          const prices = await fetchTdPrices(symbol);
           if (prices && prices.length >= 50) {
-            return { symbol, name: STOCK_NAMES[symbol] || symbol, prices, fundamentals };
+            return { symbol, name: STOCK_NAMES[symbol] || symbol, prices, fundamentals: emptyFundamentals };
           }
           return null;
         })
       );
       for (const r of batchResults) {
         if (r) results.push(r);
+      }
+      if (i + BATCH_SIZE < MAX_SYMBOLS) {
+        await sleep(BATCH_DELAY_MS);
       }
     }
 
