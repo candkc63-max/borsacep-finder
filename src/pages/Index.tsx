@@ -30,7 +30,8 @@ import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
 import { isInIndex } from "@/lib/indices";
 import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fundamentals";
-import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen } from "lucide-react";
+import { JournalDialog } from "@/components/journal/JournalDialog";
 
 const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
   { value: "ALL", label: "Tümü" },
@@ -55,6 +56,7 @@ const Index = () => {
   const { portfolio, addToPortfolio, removeFromPortfolio } = usePortfolio();
   const { enabled: notifEnabled, toggleNotifications, sendNotification } = useNotifications();
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
   const [panicOpen, setPanicOpen] = useState(false);
   const [coachSeed, setCoachSeed] = useState<{
     text: string;
@@ -293,6 +295,9 @@ const Index = () => {
             <Button variant="ghost" size="sm" onClick={() => setShowPortfolio(!showPortfolio)} className={cn("h-8 w-8 p-0", showPortfolio && "bg-primary/10")} title="Portföy">
               <Briefcase className="w-3.5 h-3.5" />
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => setJournalOpen(true)} className="h-8 w-8 p-0" title="Trade Journal">
+              <BookOpen className="w-3.5 h-3.5" />
+            </Button>
             {user ? (
               <div className="flex items-center gap-1.5 ml-1">
                 <span className="text-xs font-mono text-muted-foreground hidden sm:inline truncate max-w-[100px]">{user.email}</span>
@@ -460,6 +465,18 @@ const Index = () => {
         portfolio={portfolioSummary}
         onClose={closePanic}
         onContinueToCoach={handleContinueToCoachFromPanic}
+      />
+
+      <JournalDialog
+        open={journalOpen}
+        onOpenChange={setJournalOpen}
+        onRequestCoachReview={(summary) =>
+          setCoachSeed({
+            text: summary,
+            scenario: "journal_review",
+            key: `journal-${Date.now()}`,
+          })
+        }
       />
     </div>
   );
