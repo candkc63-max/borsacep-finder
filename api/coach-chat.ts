@@ -148,8 +148,9 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
-  const ANTHROPIC_API_KEY = (globalThis as unknown as { process?: { env?: Record<string, string> } })
-    .process?.env?.ANTHROPIC_API_KEY;
+  // Vercel Edge Runtime: process.env global olarak mevcut
+  // @ts-expect-error — Edge runtime process.env'i destekler, tip tanımı bazı versiyonlarda eksik olabilir
+  const ANTHROPIC_API_KEY: string | undefined = process.env.ANTHROPIC_API_KEY;
 
   if (!ANTHROPIC_API_KEY) {
     return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY yapılandırılmamış" }), {
