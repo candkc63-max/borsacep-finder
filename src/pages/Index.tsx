@@ -22,6 +22,9 @@ import { QuickFilters, type Preset } from "@/components/QuickFilters";
 import { AdvancedFilters, emptyAdvancedFilters, type AdvancedFilterState } from "@/components/AdvancedFilters";
 import { Footer } from "@/components/Footer";
 import { EgitmenFloatingButton } from "@/components/EgitmenFloatingButton";
+import { PanicModal } from "@/components/coach/PanicModal";
+import { summarizePortfolio } from "@/lib/coach/portfolioSummary";
+import type { CoachScenario } from "@/lib/coach/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
@@ -52,6 +55,12 @@ const Index = () => {
   const { portfolio, addToPortfolio, removeFromPortfolio } = usePortfolio();
   const { enabled: notifEnabled, toggleNotifications, sendNotification } = useNotifications();
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [panicOpen, setPanicOpen] = useState(false);
+  const [coachSeed, setCoachSeed] = useState<{
+    text: string;
+    scenario: CoachScenario;
+    key: string;
+  } | null>(null);
 
   const [strategy, setStrategy] = useState<StrategyId>(() => {
     try {
@@ -88,6 +97,39 @@ const Index = () => {
 
   const stockData = liveStocks ?? mockStocks;
   const isLive = !!liveStocks;
+
+  // Koç için portföy özeti — panik modu + koç context'i
+  const portfolioSummary = useMemo(
+    () => summarizePortfolio(portfolio, stockData.map((s) => ({ symbol: s.symbol, prices: s.prices }))),
+    [portfolio, stockData],
+  );
+
+  // Panik tetiği — portföy -%5'in altına düşerse (24 saat snooze)
+  useEffect(() => {
+    if (!portfolioSummary || typeof portfolioSummary.totalPnlPct !== "number") return;
+    if (portfolioSummary.totalPnlPct > -5) return;
+
+    const SNOOZE_KEY = "borsacep-panic-snooze-until";
+    const until = parseInt(localStorage.getItem(SNOOZE_KEY) || "0", 10);
+    if (Date.now() < until) return;
+
+    setPanicOpen(true);
+  }, [portfolioSummary]);
+
+  const closePanic = () => {
+    setPanicOpen(false);
+    localStorage.setItem("borsacep-panic-snooze-until", String(Date.now() + 24 * 60 * 60 * 1000));
+  };
+
+  const handleContinueToCoachFromPanic = () => {
+    closePanic();
+    const pnl = portfolioSummary?.totalPnlPct?.toFixed(2) ?? "?";
+    setCoachSeed({
+      text: `Portföyüm %${pnl} düştü, sattım mı satmadım mı kararsızım. Beni konuştur.`,
+      scenario: "panic",
+      key: `panic-${Date.now()}`,
+    });
+  };
 
   // Filter strategies by timeframe
   const filteredStrategies = useMemo(() => {
@@ -407,7 +449,18 @@ const Index = () => {
         onAddToPortfolio={addToPortfolio}
       />
 
-      <EgitmenFloatingButton />
+      <EgitmenFloatingButton
+        portfolioContext={portfolioSummary ?? undefined}
+        coachSeed={coachSeed}
+        onCoachSeedConsumed={() => setCoachSeed(null)}
+      />
+
+      <PanicModal
+        open={panicOpen}
+        portfolio={portfolioSummary}
+        onClose={closePanic}
+        onContinueToCoach={handleContinueToCoachFromPanic}
+      />
     </div>
   );
 };

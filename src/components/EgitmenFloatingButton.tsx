@@ -1,10 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GraduationCap, X } from "lucide-react";
-import { BorsaEgitmeni } from "./BorsaEgitmeni";
+import { AiChatTabs } from "./AiChatTabs";
 import { cn } from "@/lib/utils";
+import type { CoachContext, CoachScenario } from "@/lib/coach/types";
 
-export function EgitmenFloatingButton() {
+interface Props {
+  /** Koç için portföy context (dashboard'dan geçilir) */
+  portfolioContext?: CoachContext["portfolio"];
+  /** Koç'a dışarıdan seed mesaj (örn. panik modundan "koçla konuşayım") */
+  coachSeed?: { text: string; scenario: CoachScenario; key: string } | null;
+  /** Seed geldiğinde otomatik aç */
+  autoOpenOnSeed?: boolean;
+  /** Seed işlendikten sonra parent bilgilendirilsin */
+  onCoachSeedConsumed?: () => void;
+}
+
+export function EgitmenFloatingButton({
+  portfolioContext,
+  coachSeed,
+  autoOpenOnSeed = true,
+  onCoachSeedConsumed,
+}: Props) {
   const [open, setOpen] = useState(false);
+
+  // Seed geldiğinde paneli aç
+  useEffect(() => {
+    if (coachSeed && autoOpenOnSeed) setOpen(true);
+  }, [coachSeed, autoOpenOnSeed]);
 
   return (
     <>
@@ -14,9 +36,9 @@ export function EgitmenFloatingButton() {
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl flex items-center justify-center transition-all active:scale-95",
-          open && "scale-90"
+          open && "scale-90",
         )}
-        aria-label={open ? "Eğitmeni kapat" : "Borsa Eğitmeni'ne sor"}
+        aria-label={open ? "Paneli kapat" : "Eğitmen & Koç"}
       >
         {open ? <X className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
       </button>
@@ -26,13 +48,15 @@ export function EgitmenFloatingButton() {
         <div
           className={cn(
             "fixed z-40 bg-background",
-            // Mobile: full screen with safe spacing for the button
             "inset-x-2 top-2 bottom-24",
-            // Desktop: floating panel above the button
-            "sm:inset-auto sm:bottom-24 sm:right-5 sm:top-auto sm:w-[420px] sm:h-[640px] sm:max-h-[80vh]"
+            "sm:inset-auto sm:bottom-24 sm:right-5 sm:top-auto sm:w-[460px] sm:h-[680px] sm:max-h-[82vh]",
           )}
         >
-          <BorsaEgitmeni embedded />
+          <AiChatTabs
+            portfolioContext={portfolioContext}
+            coachSeed={coachSeed}
+            onCoachSeedConsumed={onCoachSeedConsumed}
+          />
         </div>
       )}
     </>
