@@ -3,8 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Mail, Lock, User, Loader2, Phone, ShieldCheck } from "lucide-react";
+import { Activity, Mail, Lock, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { hasBackend, supabase } from "@/lib/backend";
 
@@ -12,17 +11,9 @@ const Auth = () => {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [authMethod, setAuthMethod] = useState<"email" | "phone">("email");
-
-  // Email state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-
-  // Phone state
-  const [phone, setPhone] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,94 +87,6 @@ const Auth = () => {
     }
   };
 
-  /** E.164 normalize — "05321234567" → "+905321234567" */
-  const normalizePhone = (raw: string): string | null => {
-    const digits = raw.replace(/[\s\-()]/g, "");
-    if (digits.startsWith("+")) {
-      return /^\+\d{10,15}$/.test(digits) ? digits : null;
-    }
-    if (digits.startsWith("0") && digits.length === 11) {
-      return `+9${digits}`;
-    }
-    if (digits.length === 10 && digits.startsWith("5")) {
-      return `+90${digits}`;
-    }
-    if (digits.startsWith("90") && digits.length === 12) {
-      return `+${digits}`;
-    }
-    return null;
-  };
-
-  const handlePhoneSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!hasBackend) {
-      toast.error("Giriş sistemi şu anda kullanılamıyor.");
-      return;
-    }
-    const normalized = normalizePhone(phone);
-    if (!normalized) {
-      toast.error("Geçerli bir Türkiye telefon numarası gir (örn: 05321234567)");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: normalized,
-        options: {
-          data: { full_name: displayName || undefined },
-        },
-      });
-      if (error) {
-        if (error.message?.toLowerCase().includes("phone") || error.message?.toLowerCase().includes("sms")) {
-          toast.error(
-            "Telefon ile giriş henüz etkin değil. Supabase Dashboard → Authentication → Providers → Phone sekmesinden etkinleştir.",
-            { duration: 8000 },
-          );
-          return;
-        }
-        throw error;
-      }
-      toast.success("SMS gönderildi. Kod 5 dakika içinde gelir.");
-      setOtpSent(true);
-    } catch (err: any) {
-      toast.error(err.message || "Kod gönderilemedi");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePhoneVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const normalized = normalizePhone(phone);
-    if (!normalized) return;
-    if (!otpCode || otpCode.length < 4) {
-      toast.error("Kodu gir");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: normalized,
-        token: otpCode,
-        type: "sms",
-      });
-      if (error) throw error;
-      toast.success("Giriş başarılı!");
-      navigate("/");
-    } catch (err: any) {
-      toast.error(err.message || "Kod yanlış veya süresi doldu");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetPhone = () => {
-    setOtpSent(false);
-    setOtpCode("");
-  };
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
@@ -225,164 +128,65 @@ const Auth = () => {
           </div>
         </div>
 
-        {/* Email / Phone tabs */}
-        <Tabs value={authMethod} onValueChange={(v) => setAuthMethod(v as "email" | "phone")}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="email">
-              <Mail className="w-3.5 h-3.5 mr-1.5" /> E-posta
-            </TabsTrigger>
-            <TabsTrigger value="phone">
-              <Phone className="w-3.5 h-3.5 mr-1.5" /> Telefon
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Email Form */}
-          <TabsContent value="email">
-            <form onSubmit={handleEmailAuth} className="space-y-4 mt-4">
-              {!isLogin && (
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="text-xs font-mono text-muted-foreground">
-                    Ad Soyad
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="name"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="İsminiz"
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs font-mono text-muted-foreground">
-                  E-posta
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="ornek@email.com"
-                    className="pl-10"
-                    required
-                  />
-                </div>
+        {/* Email Form */}
+        <form onSubmit={handleEmailAuth} className="space-y-4">
+          {!isLogin && (
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-xs font-mono text-muted-foreground">
+                Ad Soyad
+              </Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="İsminiz"
+                  className="pl-10"
+                />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-xs font-mono text-muted-foreground">
-                  Şifre
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••"
-                    className="pl-10"
-                    minLength={6}
-                    required
-                  />
-                </div>
-              </div>
-              <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !hasBackend}>
-                {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {isLogin ? "Giriş Yap" : "Üye Ol"}
-              </Button>
-            </form>
-          </TabsContent>
-
-          {/* Phone Form */}
-          <TabsContent value="phone">
-            {!otpSent ? (
-              <form onSubmit={handlePhoneSendOtp} className="space-y-4 mt-4">
-                {!isLogin && (
-                  <div className="space-y-2">
-                    <Label htmlFor="phone-name" className="text-xs font-mono text-muted-foreground">
-                      Ad Soyad
-                    </Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="phone-name"
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
-                        placeholder="İsminiz"
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-xs font-mono text-muted-foreground">
-                    Telefon
-                  </Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="05321234567"
-                      className="pl-10"
-                      required
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">SMS ile doğrulama kodu gönderilecek</p>
-                </div>
-                <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !hasBackend}>
-                  {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Kod gönder
-                </Button>
-              </form>
-            ) : (
-              <form onSubmit={handlePhoneVerify} className="space-y-4 mt-4">
-                <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                  <span className="font-mono text-foreground">{normalizePhone(phone)}</span>{" "}
-                  numarasına SMS gönderildi.
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="otp" className="text-xs font-mono text-muted-foreground">
-                    Doğrulama kodu (6 hane)
-                  </Label>
-                  <div className="relative">
-                    <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="otp"
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="123456"
-                      className="pl-10 tracking-widest text-center"
-                      maxLength={6}
-                      required
-                    />
-                  </div>
-                </div>
-                <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
-                  {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Doğrula ve gir
-                </Button>
-                <button
-                  type="button"
-                  onClick={resetPhone}
-                  className="w-full text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Numarayı değiştir
-                </button>
-              </form>
-            )}
-          </TabsContent>
-        </Tabs>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-xs font-mono text-muted-foreground">
+              E-posta
+            </Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ornek@email.com"
+                className="pl-10"
+                required
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password" className="text-xs font-mono text-muted-foreground">
+              Şifre
+            </Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••"
+                className="pl-10"
+                minLength={6}
+                required
+              />
+            </div>
+          </div>
+          <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !hasBackend}>
+            {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {isLogin ? "Giriş Yap" : "Üye Ol"}
+          </Button>
+        </form>
 
         {!hasBackend && (
           <p className="text-center text-xs text-muted-foreground">
@@ -393,10 +197,7 @@ const Auth = () => {
         <p className="text-center text-sm text-muted-foreground">
           {isLogin ? "Hesabınız yok mu?" : "Zaten üye misiniz?"}{" "}
           <button
-            onClick={() => {
-              setIsLogin(!isLogin);
-              resetPhone();
-            }}
+            onClick={() => setIsLogin(!isLogin)}
             className="text-primary font-semibold hover:underline"
           >
             {isLogin ? "Üye Ol" : "Giriş Yap"}
