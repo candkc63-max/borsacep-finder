@@ -36,7 +36,8 @@ type Scenario =
   | "fomo"
   | "journal_review"
   | "realistic_expectation"
-  | "stop_loss_miss";
+  | "stop_loss_miss"
+  | "scam_check";
 
 interface CoachContext {
   scenario?: Scenario;
@@ -119,6 +120,19 @@ GÖREV: Nazikçe ama net şekilde gerçekçi beklenti çerçevesini hatırlat (y
       parts.push(
         `SENARYO: Kullanıcı stop-loss seviyesini geçmesine rağmen pozisyonu kapatmadı.
 GÖREV: Disiplin vurgusu yap. "Kendi koyduğun kurala uymak, kuralı hiç koymamaktan daha önemli" mesajı ver.`,
+      );
+      break;
+
+    case "scam_check":
+      parts.push(
+        `SENARYO: Kullanıcı bir URL, Telegram/WhatsApp grubu, X hesabı, YouTube kanalı veya "VIP sinyal" tavsiyesini sana gönderdi ve "bu güvenilir mi, scam mi?" diye soruyor.
+GÖREV:
+1) Türkiye finans scam örüntülerini tara: ücretsiz sinyal → ödeme dönüşü, "kesin kazandırıyor" vaadi, sahte ekran görüntüleri, "sadece bugün" aciliyet baskısı, SPK lisansı olmadan danışmanlık, crypto pump/dump grupları.
+2) "Bu hesap %X scam riski taşıyor" tarzı net bir sonuç ver (düşük/orta/yüksek risk).
+3) Kırmızı bayrakları madde madde listele (max 4 madde).
+4) Kendi başına tespit edemediğin şey varsa "bilmiyorum, kontrol etmem gerekir" de — uydurma.
+5) SPK lisanslı olmayan herhangi bir birinin "al bunu" demesinin suç olduğunu hatırlat.
+6) Son cümle: "Şüphen varsa, uzak dur. Fırsat kaçırdığını düşündüğün şey büyük ihtimalle tuzaktır."`,
       );
       break;
 

@@ -9,7 +9,8 @@ export type CoachScenario =
   | "fomo"
   | "journal_review"
   | "realistic_expectation"
-  | "stop_loss_miss";
+  | "stop_loss_miss"
+  | "scam_check";
 
 export interface CoachPortfolioContext {
   totalPnlPct?: number;

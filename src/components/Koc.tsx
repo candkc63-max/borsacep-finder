@@ -2,12 +2,14 @@ import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 
 import { Send, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CoachContext, CoachMessage, CoachScenario } from "@/lib/coach/types";
+import { applyExpectationMiddleware } from "@/lib/coach/middleware";
 
 const QUICK_PROMPTS: Array<{ label: string; text: string; scenario: CoachScenario }> = [
   { label: "Panik ettim", text: "Portföyüm düştü, panik yaşıyorum. Sakinleştir.", scenario: "panic" },
   { label: "FOMO var", text: "Uçan bir hisseye girmek üzereyim, ne diyorsun?", scenario: "fomo" },
   { label: "2 ayda 2x", text: "2 ayda paramı 2'ye katlamak istiyorum.", scenario: "realistic_expectation" },
   { label: "Stop kaçırdım", text: "Stop seviyem vuruldu ama satmadım, hata mı ettim?", scenario: "stop_loss_miss" },
+  { label: "Scam mi?", text: "Bir Telegram grubuna aldılar beni, VIP sinyal veriyor diyorlar. Bu güvenilir mi?", scenario: "scam_check" },
   { label: "Serbest sohbet", text: "Dostum bugün kafam dağınık, konuşalım.", scenario: "chat" },
 ];
 
@@ -54,8 +56,10 @@ export function Koc({ embedded = false, portfolioContext, seed, onSeedConsumed }
     const trimmed = text.trim();
     if (!trimmed || isLoading) return;
 
-    const scenario = scenarioOverride ?? activeScenario;
-    if (scenarioOverride) setActiveScenario(scenarioOverride);
+    // Middleware: gerçekçi olmayan beklenti pattern'ini yakala → scenario'yu çevir
+    const baseScenario = scenarioOverride ?? activeScenario;
+    const scenario = applyExpectationMiddleware(baseScenario, trimmed);
+    if (scenarioOverride || scenario !== activeScenario) setActiveScenario(scenario);
 
     const userMsg: CoachMessage = { role: "user", content: trimmed };
     const apiHistory =
