@@ -10,6 +10,9 @@ import { useNotifications } from "@/hooks/useNotifications";
 import {
   applyStrategy, strategies, calcRSI, detectEmaCross, detectMacdCross,
   detectBollingerState, isVolumeSpike, calcMACD,
+  sma200BreakUp, sma200BreakDown, priceAboveSma, priceBelowSma,
+  recentGoldenCross, recentDeathCross, is52WeekHighBreak,
+  rsiOversoldBouncing, strongMomentum,
   type StrategyId, type Signal, type Timeframe,
 } from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
@@ -288,6 +291,43 @@ const Index = () => {
           if (advFilters.marketCap && getMarketCapBucket(f.marketCap) !== advFilters.marketCap) return false;
           if (advFilters.pe && !matchPe(f.pe, advFilters.pe)) return false;
           if (advFilters.div && !matchDiv(f.divYield, advFilters.div)) return false;
+        }
+
+        // Fiyat / SMA pozisyonu
+        if (advFilters.smaPosition) {
+          switch (advFilters.smaPosition) {
+            case "break_up_200":
+              if (!sma200BreakUp(prices)) return false;
+              break;
+            case "break_down_200":
+              if (!sma200BreakDown(prices)) return false;
+              break;
+            case "above_50":
+              if (!priceAboveSma(prices, 50)) return false;
+              break;
+            case "below_50":
+              if (!priceBelowSma(prices, 50)) return false;
+              break;
+            case "above_200":
+              if (!priceAboveSma(prices, 200)) return false;
+              break;
+            case "below_200":
+              if (!priceBelowSma(prices, 200)) return false;
+              break;
+          }
+        }
+
+        // Büyük trend kesişimi (50/200)
+        if (advFilters.majorCross) {
+          if (advFilters.majorCross === "golden_50_200" && !recentGoldenCross(prices, 50, 200, 10)) return false;
+          if (advFilters.majorCross === "death_50_200" && !recentDeathCross(prices, 50, 200, 10)) return false;
+        }
+
+        // Özel kurulumlar
+        if (advFilters.setup) {
+          if (advFilters.setup === "52w_high_break" && !is52WeekHighBreak(prices)) return false;
+          if (advFilters.setup === "rsi_oversold_bounce" && !rsiOversoldBouncing(prices)) return false;
+          if (advFilters.setup === "strong_momentum" && !strongMomentum(prices)) return false;
         }
 
         return true;

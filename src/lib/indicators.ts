@@ -135,6 +135,137 @@ export function isVolumeSpike(volumes: number[] | undefined, multiplier = 2, per
   return today >= avg * multiplier;
 }
 
+// ─── Ek Gelişmiş Filtre Yardımcıları ───────────────────────────────────────
+
+/**
+ * Fiyat verilen SMA periyodunu son `lookback` gün içinde yukarı kırdı mı?
+ * (önceki dönem altında, şimdi üstünde)
+ */
+export function sma200BreakUp(prices: number[], period = 200, lookback = 5): boolean {
+  if (prices.length < period + lookback) return false;
+  const nowSma = calcSMA(prices, period);
+  const nowPrice = prices[0];
+  if (!nowSma || nowPrice <= nowSma) return false;
+  // lookback gün önce fiyat bu SMA'nın altında olmalı
+  const pastPrices = prices.slice(lookback);
+  const pastSma = calcSMA(pastPrices, period);
+  const pastPrice = prices[lookback];
+  if (!pastSma) return false;
+  return pastPrice < pastSma;
+}
+
+export function sma200BreakDown(prices: number[], period = 200, lookback = 5): boolean {
+  if (prices.length < period + lookback) return false;
+  const nowSma = calcSMA(prices, period);
+  const nowPrice = prices[0];
+  if (!nowSma || nowPrice >= nowSma) return false;
+  const pastPrices = prices.slice(lookback);
+  const pastSma = calcSMA(pastPrices, period);
+  const pastPrice = prices[lookback];
+  if (!pastSma) return false;
+  return pastPrice > pastSma;
+}
+
+/**
+ * Fiyat verilen SMA periyodunun üstünde mi? (basit konum testi — kırılımdan farklı)
+ */
+export function priceAboveSma(prices: number[], period: number): boolean {
+  const sma = calcSMA(prices, period);
+  if (!sma) return false;
+  return prices[0] > sma;
+}
+
+export function priceBelowSma(prices: number[], period: number): boolean {
+  const sma = calcSMA(prices, period);
+  if (!sma) return false;
+  return prices[0] < sma;
+}
+
+/**
+ * Son `lookback` gün içinde altın kesişim olmuş mu?
+ * (EMA fast, EMA slow'un altındayken üstüne çıktı)
+ */
+export function recentGoldenCross(
+  prices: number[],
+  fast = 50,
+  slow = 200,
+  lookback = 10,
+): boolean {
+  if (prices.length < slow + lookback) return false;
+  const nowFast = calcEMA(prices, fast);
+  const nowSlow = calcEMA(prices, slow);
+  if (!nowFast || !nowSlow || nowFast <= nowSlow) return false;
+  // lookback gün önce fast, slow'un altında olmalı
+  const past = prices.slice(lookback);
+  const pastFast = calcEMA(past, fast);
+  const pastSlow = calcEMA(past, slow);
+  if (!pastFast || !pastSlow) return false;
+  return pastFast < pastSlow;
+}
+
+export function recentDeathCross(
+  prices: number[],
+  fast = 50,
+  slow = 200,
+  lookback = 10,
+): boolean {
+  if (prices.length < slow + lookback) return false;
+  const nowFast = calcEMA(prices, fast);
+  const nowSlow = calcEMA(prices, slow);
+  if (!nowFast || !nowSlow || nowFast >= nowSlow) return false;
+  const past = prices.slice(lookback);
+  const pastFast = calcEMA(past, fast);
+  const pastSlow = calcEMA(past, slow);
+  if (!pastFast || !pastSlow) return false;
+  return pastFast > pastSlow;
+}
+
+/**
+ * 52 haftalık (252 işlem günü) zirveye yakın veya yeni zirve kırılımı.
+ */
+export function is52WeekHighBreak(prices: number[], toleranceDays = 5): boolean {
+  if (prices.length < 252) return false;
+  const window = prices.slice(0, 252);
+  const max = Math.max(...window);
+  const today = prices[0];
+  // Bugünkü fiyat son 252 günün %99.5+'ına değiyor mu
+  if (today < max * 0.995) return false;
+  // Son `toleranceDays` gün öncesinden yukarı kırılım olmalı
+  for (let i = toleranceDays; i < Math.min(252, prices.length); i++) {
+    if (prices[i] >= max * 0.995) return false;
+  }
+  return true;
+}
+
+/**
+ * RSI aşırı satım + son 3 gün yukarı yönlü momentum
+ * ("dönüş sinyali" — klasik RSI dip avı)
+ */
+export function rsiOversoldBouncing(prices: number[]): boolean {
+  const rsi = calcRSI(prices);
+  if (rsi === null || rsi > 35) return false; // 30 biraz esnetilmiş
+  // Son 3 gün fiyat yukarı yönlü?
+  if (prices.length < 4) return false;
+  return prices[0] > prices[1] && prices[1] > prices[2];
+}
+
+/**
+ * Son 5 günde güçlü momentum:
+ * - Fiyat %3+ yukarı
+ * - RSI 50'nin üstünde
+ * - MACD histogram pozitif
+ */
+export function strongMomentum(prices: number[]): boolean {
+  if (prices.length < 6) return false;
+  const chg5 = (prices[0] - prices[5]) / prices[5];
+  if (chg5 < 0.03) return false;
+  const rsi = calcRSI(prices);
+  if (rsi === null || rsi < 50) return false;
+  const m = calcMACD(prices);
+  if (!m || m.histogram <= 0) return false;
+  return true;
+}
+
 export type Signal = "AL" | "SAT" | "NÖTR";
 
 export interface StrategyResult {

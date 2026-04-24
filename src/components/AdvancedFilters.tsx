@@ -12,6 +12,26 @@ export type MarketCapFilter = "small" | "mid" | "large" | null;
 export type PeFilter = "low" | "mid" | "high" | null;
 export type DivFilter = "none" | "low" | "mid" | "high" | null;
 
+/** Son günlerde fiyat/SMA etkileşimi */
+export type SmaPositionFilter =
+  | "break_up_200"   // son 5 gün içinde 200 SMA'yı yukarı kırdı
+  | "break_down_200" // son 5 gün içinde 200 SMA'yı aşağı kırdı
+  | "above_50"       // fiyat 50 SMA üstünde
+  | "below_50"       // fiyat 50 SMA altında
+  | "above_200"      // fiyat 200 SMA üstünde
+  | "below_200"      // fiyat 200 SMA altında
+  | null;
+
+/** 50/200 EMA kesişim (trend dönüşü) */
+export type MajorCrossFilter = "golden_50_200" | "death_50_200" | null;
+
+/** Özel setupler */
+export type SetupFilter =
+  | "52w_high_break"      // 52 hafta zirve kırılımı
+  | "rsi_oversold_bounce" // RSI aşırı satım + 3 gün yukarı
+  | "strong_momentum"     // son 5 gün +%3, RSI>50, MACD+
+  | null;
+
 export interface AdvancedFilterState {
   rsi: RsiZone;
   macd: MacdSignal;
@@ -22,11 +42,15 @@ export interface AdvancedFilterState {
   marketCap: MarketCapFilter;
   pe: PeFilter;
   div: DivFilter;
+  smaPosition: SmaPositionFilter;
+  majorCross: MajorCrossFilter;
+  setup: SetupFilter;
 }
 
 export const emptyAdvancedFilters: AdvancedFilterState = {
   rsi: null, macd: null, emaCross: null, bollinger: null, volume: null, index: null,
   marketCap: null, pe: null, div: null,
+  smaPosition: null, majorCross: null, setup: null,
 };
 
 interface Props {
@@ -66,6 +90,35 @@ const groups: Group<keyof AdvancedFilterState>[] = [
     options: [
       { value: "golden", label: "Altın kesişim", cls: "border-bullish text-bullish bg-bullish/10" },
       { value: "death", label: "Ölüm kesişimi", cls: "border-bearish text-bearish bg-bearish/10" },
+    ],
+  },
+  {
+    key: "majorCross",
+    label: "Büyük Trend Kesişimi (EMA 50/200 — son 10 gün)",
+    options: [
+      { value: "golden_50_200", label: "Altın Kesişim (Golden Cross)", cls: "border-bullish text-bullish bg-bullish/10" },
+      { value: "death_50_200", label: "Ölüm Kesişimi (Death Cross)", cls: "border-bearish text-bearish bg-bearish/10" },
+    ],
+  },
+  {
+    key: "smaPosition",
+    label: "Fiyat / SMA İlişkisi",
+    options: [
+      { value: "break_up_200", label: "200 SMA yukarı kırıldı (son 5 gün)", cls: "border-bullish text-bullish bg-bullish/10" },
+      { value: "break_down_200", label: "200 SMA aşağı kırıldı (son 5 gün)", cls: "border-bearish text-bearish bg-bearish/10" },
+      { value: "above_50", label: "Fiyat > 50 SMA", cls: "border-bullish text-bullish bg-bullish/10" },
+      { value: "below_50", label: "Fiyat < 50 SMA", cls: "border-bearish text-bearish bg-bearish/10" },
+      { value: "above_200", label: "Fiyat > 200 SMA", cls: "border-bullish text-bullish bg-bullish/10" },
+      { value: "below_200", label: "Fiyat < 200 SMA", cls: "border-bearish text-bearish bg-bearish/10" },
+    ],
+  },
+  {
+    key: "setup",
+    label: "Özel Kurulumlar",
+    options: [
+      { value: "52w_high_break", label: "52 Hafta Zirve Kırılımı", cls: "border-bullish text-bullish bg-bullish/10" },
+      { value: "rsi_oversold_bounce", label: "RSI Aşırı Satım + Dönüş", cls: "border-bullish text-bullish bg-bullish/10" },
+      { value: "strong_momentum", label: "Güçlü Momentum (5G +%3, RSI>50, MACD+)", cls: "border-bullish text-bullish bg-bullish/10" },
     ],
   },
   {
