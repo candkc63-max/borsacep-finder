@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { StrategyResult, Signal, StrategyId } from "@/lib/indicators";
 import { strategies, applyStrategy, calcRSI, calcMACD, calcBollinger, calcSMA, calcEMA } from "@/lib/indicators";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, ArrowDownRight, Minus, TrendingUp, Briefcase } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Minus, TrendingUp, Briefcase, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell, ComposedChart, Area } from "recharts";
 import { useMemo, useState } from "react";
@@ -16,6 +16,7 @@ interface StockDetailModalProps {
   stock: { symbol: string; name: string; prices: number[] } | null;
   currentStrategy: StrategyId;
   onAddToPortfolio?: (item: { symbol: string; name: string; buyPrice: number; quantity: number }) => void;
+  onAskCoach?: (stock: { symbol: string; name: string; prices: number[] }) => void;
 }
 
 const signalBadge: Record<Signal, { className: string; icon: React.ReactNode }> = {
@@ -24,7 +25,7 @@ const signalBadge: Record<Signal, { className: string; icon: React.ReactNode }> 
   NÖTR: { className: "bg-muted text-muted-foreground border-border", icon: <Minus className="w-4 h-4" /> },
 };
 
-export function StockDetailModal({ open, onOpenChange, stock, currentStrategy, onAddToPortfolio }: StockDetailModalProps) {
+export function StockDetailModal({ open, onOpenChange, stock, currentStrategy, onAddToPortfolio, onAskCoach }: StockDetailModalProps) {
   const [portfolioQty, setPortfolioQty] = useState(1);
   const chartData = useMemo(() => {
     if (!stock) return [];
@@ -120,7 +121,21 @@ export function StockDetailModal({ open, onOpenChange, stock, currentStrategy, o
           </DialogTitle>
         </DialogHeader>
 
-        {/* Add to Portfolio */}
+        {/* Koç'a Sor + Portföye Ekle */}
+        <div className="flex items-center gap-2 mt-2">
+          {onAskCoach && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => onAskCoach(stock)}
+              title="Bu grafiği Koç yorumlasın"
+            >
+              <Compass className="w-3.5 h-3.5 text-primary" />
+              Bunu anla (Koç)
+            </Button>
+          )}
+        </div>
         {onAddToPortfolio && (
           <div className="flex items-center gap-2 mt-2 p-3 rounded-lg bg-muted/50 border border-border">
             <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />

@@ -33,6 +33,7 @@ import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fu
 import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing } from "lucide-react";
 import { JournalDialog } from "@/components/journal/JournalDialog";
 import { AlertCenter } from "@/components/alerts/AlertCenter";
+import { buildStockSummaryForCoach } from "@/lib/coach/chartSummary";
 import { useAlertMonitor, type TriggeredAlert } from "@/lib/alerts/monitor";
 import { useAutoAlertsFromJournal } from "@/lib/alerts/autoFromJournal";
 import { coachScenarioForAlert } from "@/lib/alerts/engine";
@@ -497,6 +498,14 @@ const Index = () => {
         stock={selectedSymbol ? stockData.find(s => s.symbol === selectedSymbol) ?? null : null}
         currentStrategy={strategy}
         onAddToPortfolio={addToPortfolio}
+        onAskCoach={(s) => {
+          setSelectedSymbol(null);
+          setCoachSeed({
+            text: buildStockSummaryForCoach(s),
+            scenario: "chat",
+            key: `chart-${s.symbol}-${Date.now()}`,
+          });
+        }}
       />
 
       <EgitmenFloatingButton
