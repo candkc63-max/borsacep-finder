@@ -30,8 +30,14 @@ import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
 import { isInIndex } from "@/lib/indices";
 import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fundamentals";
-import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing } from "lucide-react";
 import { JournalDialog } from "@/components/journal/JournalDialog";
+import { AlertCenter } from "@/components/alerts/AlertCenter";
+import { useAlertMonitor, type TriggeredAlert } from "@/lib/alerts/monitor";
+import { useAutoAlertsFromJournal } from "@/lib/alerts/autoFromJournal";
+import { coachScenarioForAlert } from "@/lib/alerts/engine";
+import type { AlertKind } from "@/lib/alerts/types";
+import { toast } from "sonner";
 
 const signalFilters: { value: Signal | "ALL" | "FAV"; label: string }[] = [
   { value: "ALL", label: "Tümü" },
@@ -57,6 +63,7 @@ const Index = () => {
   const { enabled: notifEnabled, toggleNotifications, sendNotification } = useNotifications();
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [alertCenterOpen, setAlertCenterOpen] = useState(false);
   const [panicOpen, setPanicOpen] = useState(false);
   const [coachSeed, setCoachSeed] = useState<{
     text: string;
@@ -132,6 +139,36 @@ const Index = () => {
       key: `panic-${Date.now()}`,
     });
   };
+
+  // Journal → otomatik alarm üretimi
+  useAutoAlertsFromJournal();
+
+  // Alarm monitörü — stockData her güncellendiğinde armed alarmları değerlendir
+  const handleAlertTrigger = (t: TriggeredAlert) => {
+    const KIND_META: Record<AlertKind, { icon: string; title: string }> = {
+      fomo: { icon: "🚀", title: "FOMO Alarmı" },
+      stop_loss: { icon: "🛑", title: "Stop-Loss Vurdu" },
+      take_profit: { icon: "🎯", title: "Kar Al Hedefi" },
+      price_above: { icon: "📈", title: "Fiyat Üstü" },
+      price_below: { icon: "📉", title: "Fiyat Altı" },
+    };
+    const meta = KIND_META[t.alert.kind];
+    toast(`${meta.icon} ${meta.title} · ${t.alert.symbol}`, {
+      description: t.reason,
+      duration: 15000,
+      action: {
+        label: "Koç'a sor",
+        onClick: () => {
+          setCoachSeed({
+            text: buildAlertSeed(t),
+            scenario: coachScenarioForAlert(t.alert),
+            key: `alert-${t.alert.id}-${t.triggeredAt}`,
+          });
+        },
+      },
+    });
+  };
+  const { armedCount } = useAlertMonitor(stockData, handleAlertTrigger);
 
   // Filter strategies by timeframe
   const filteredStrategies = useMemo(() => {
@@ -297,6 +334,14 @@ const Index = () => {
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setJournalOpen(true)} className="h-8 w-8 p-0" title="Trade Journal">
               <BookOpen className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setAlertCenterOpen(true)} className="h-8 w-8 p-0 relative" title="Alarmlar">
+              <BellRing className="w-3.5 h-3.5" />
+              {armedCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                  {armedCount}
+                </span>
+              )}
             </Button>
             {user ? (
               <div className="flex items-center gap-1.5 ml-1">
@@ -478,8 +523,46 @@ const Index = () => {
           })
         }
       />
+
+      <AlertCenter open={alertCenterOpen} onOpenChange={setAlertCenterOpen} />
     </div>
   );
 };
+
+function buildAlertSeed(t: TriggeredAlert): string {
+  const lines: string[] = [];
+  const kindLabel: Record<AlertKind, string> = {
+    fomo: "FOMO alarmı",
+    stop_loss: "stop-loss alarmı",
+    take_profit: "kar al alarmı",
+    price_above: "fiyat üstü alarmı",
+    price_below: "fiyat altı alarmı",
+  };
+  lines.push(`${kindLabel[t.alert.kind]} tetiklendi:`);
+  lines.push(`- Sembol: ${t.alert.symbol}`);
+  lines.push(`- Şu anki fiyat: ${t.price}`);
+  if (t.alert.threshold !== undefined) lines.push(`- Eşik: ${t.alert.threshold}`);
+  if (t.alert.kind === "fomo" && t.alert.referencePrice !== undefined) {
+    lines.push(`- Referans fiyat: ${t.alert.referencePrice}`);
+    lines.push(`- Eşik yükseliş: %${t.alert.pctThreshold}`);
+  }
+  lines.push("");
+  if (t.alert.kind === "fomo") {
+    lines.push("Dostum, bir an önce atlamak istesem de — zirve riski var. Bana kısa ve net konuş:");
+    lines.push("1) Burada FOMO tuzağı neyi tetikliyor olabilir?");
+    lines.push("2) Bir sonraki fırsatın her zaman geleceğini hatırlat.");
+    lines.push("3) Al/sat deme; kararı bana bırak.");
+  } else if (t.alert.kind === "stop_loss") {
+    lines.push("Stop seviyem vuruldu. İçimden pozisyonu tutup toparlanmasını beklemek geçiyor.");
+    lines.push("Kendi koyduğum kurala uymanın neden önemli olduğunu net şekilde hatırlat.");
+    lines.push("Al/sat deme — sadece disiplin üzerine konuş.");
+  } else if (t.alert.kind === "take_profit") {
+    lines.push("Kar al seviyeme vardım. İçimden biraz daha beklemek geçiyor.");
+    lines.push("Açgözlülük tuzağını hatırlat ama baskı kurma. Karar bende.");
+  } else {
+    lines.push("Bu seviye geldi. Duygusal bir tuzak var mı, ne diyorsun?");
+  }
+  return lines.join("\n");
+}
 
 export default Index;
