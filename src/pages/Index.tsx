@@ -30,10 +30,17 @@ import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
 import { isInIndex } from "@/lib/indices";
 import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fundamentals";
-import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert, Globe, Sparkles } from "lucide-react";
 import { JournalDialog } from "@/components/journal/JournalDialog";
 import { AlertCenter } from "@/components/alerts/AlertCenter";
 import { ScamCheckDialog } from "@/components/coach/ScamCheckDialog";
+import { OnboardingDialog } from "@/components/coach/OnboardingDialog";
+import { MacroRiskDialog } from "@/components/coach/MacroRiskDialog";
+import { StressModeBanner } from "@/components/coach/StressModeBanner";
+import { PortfolioDiagnosticCard, buildPortfolioSeed } from "@/components/coach/PortfolioDiagnosticCard";
+import { useStressMonitor } from "@/lib/coach/stressMonitor";
+import { diagnosePortfolio } from "@/lib/coach/portfolioDiagnostic";
+import { readProfile } from "@/lib/coach/onboarding";
 import { buildStockSummaryForCoach } from "@/lib/coach/chartSummary";
 import { useAlertMonitor, type TriggeredAlert } from "@/lib/alerts/monitor";
 import { useAutoAlertsFromJournal } from "@/lib/alerts/autoFromJournal";
@@ -67,6 +74,19 @@ const Index = () => {
   const [journalOpen, setJournalOpen] = useState(false);
   const [alertCenterOpen, setAlertCenterOpen] = useState(false);
   const [scamCheckOpen, setScamCheckOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [macroOpen, setMacroOpen] = useState(false);
+
+  // Stres modu izleyici (#14) — detay modalı açıldığında artış
+  const stress = useStressMonitor();
+
+  // Acemi onboarding — ilk ziyarette otomatik aç
+  useEffect(() => {
+    if (!readProfile()) {
+      const timer = setTimeout(() => setOnboardingOpen(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
   const [panicOpen, setPanicOpen] = useState(false);
   const [coachSeed, setCoachSeed] = useState<{
     text: string;
@@ -349,6 +369,12 @@ const Index = () => {
             <Button variant="ghost" size="sm" onClick={() => setScamCheckOpen(true)} className="h-8 w-8 p-0" title="Scam / Guru kontrolü">
               <ShieldAlert className="w-3.5 h-3.5" />
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => setMacroOpen(true)} className="h-8 w-8 p-0" title="Makro Risk Paneli">
+              <Globe className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setOnboardingOpen(true)} className="h-8 w-8 p-0" title="Risk Profili">
+              <Sparkles className="w-3.5 h-3.5" />
+            </Button>
             {user ? (
               <div className="flex items-center gap-1.5 ml-1">
                 <span className="text-xs font-mono text-muted-foreground hidden sm:inline truncate max-w-[100px]">{user.email}</span>
@@ -377,13 +403,34 @@ const Index = () => {
           </div>
         )}
 
-        {/* Portfolio Panel */}
+        {/* Portfolio Panel + Dağılım Analizi */}
         {showPortfolio && (
-          <PortfolioPanel
-            portfolio={portfolio}
-            stockData={stockData}
-            onRemove={removeFromPortfolio}
-          />
+          <div className="space-y-3">
+            <PortfolioPanel
+              portfolio={portfolio}
+              stockData={stockData}
+              onRemove={removeFromPortfolio}
+            />
+            {(() => {
+              const priceMap = Object.fromEntries(
+                stockData.map((s) => [s.symbol, s.prices[0] ?? 0]),
+              ) as Record<string, number>;
+              const diag = diagnosePortfolio(portfolio, priceMap);
+              if (!diag) return null;
+              return (
+                <PortfolioDiagnosticCard
+                  diagnostic={diag}
+                  onAskCoach={() =>
+                    setCoachSeed({
+                      text: buildPortfolioSeed(diag),
+                      scenario: "chat",
+                      key: `portfolio-${Date.now()}`,
+                    })
+                  }
+                />
+              );
+            })()}
+          </div>
         )}
 
         {/* Timeframe Filter */}
@@ -409,6 +456,18 @@ const Index = () => {
             ))}
           </div>
         </section>
+
+        {/* Stres Modu uyarı banner'ı */}
+        <StressModeBanner
+          stress={stress}
+          onAskCoach={() =>
+            setCoachSeed({
+              text: `Dostum bugün ${stress.checks} kez portföyümü / hisse detayını açtım. Kafam dağınık, fazla kontrol ediyorum. Panik modunda olabilir miyim? Beni sakinleştir.`,
+              scenario: "panic",
+              key: `stress-${Date.now()}`,
+            })
+          }
+        />
 
         {/* Strategy Selector */}
         <section>
@@ -487,7 +546,7 @@ const Index = () => {
             <StockTable
               results={results}
               filter={signalFilter}
-              onStockClick={setSelectedSymbol}
+              onStockClick={(sym) => { stress.recordCheck(); setSelectedSymbol(sym); }}
               isFavorite={isFavorite}
               toggleFavorite={toggleFavorite}
             />
@@ -548,6 +607,20 @@ const Index = () => {
             text,
             scenario: "scam_check",
             key: `scam-${Date.now()}`,
+          })
+        }
+      />
+
+      <OnboardingDialog open={onboardingOpen} onOpenChange={setOnboardingOpen} />
+
+      <MacroRiskDialog
+        open={macroOpen}
+        onOpenChange={setMacroOpen}
+        onAskCoach={(text) =>
+          setCoachSeed({
+            text,
+            scenario: "chat",
+            key: `macro-${Date.now()}`,
           })
         }
       />
