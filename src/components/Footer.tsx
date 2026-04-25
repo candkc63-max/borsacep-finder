@@ -32,6 +32,9 @@ export function Footer() {
               <li>
                 <a href="/kvkk" className="hover:text-foreground transition-colors">KVKK Aydınlatma Metni</a>
               </li>
+              <li>
+                <a href="/yasal-uyari" className="hover:text-foreground transition-colors">Yasal Uyarı / Sorumluluk Reddi</a>
+              </li>
             </ul>
           </div>
 

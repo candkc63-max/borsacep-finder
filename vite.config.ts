@@ -26,5 +26,27 @@ export default defineConfig(({ mode }) => {
       },
       dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
     },
+    build: {
+      // 977 kB → parçalara böl, ilk yükleme hızlansın
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            "vendor-react": ["react", "react-dom", "react-router-dom"],
+            "vendor-charts": ["recharts"],
+            "vendor-radix": [
+              "@radix-ui/react-dialog",
+              "@radix-ui/react-tabs",
+              "@radix-ui/react-tooltip",
+              "@radix-ui/react-popover",
+              "@radix-ui/react-dropdown-menu",
+              "@radix-ui/react-select",
+            ],
+            "vendor-supabase": ["@supabase/supabase-js", "@tanstack/react-query"],
+            "vendor-icons": ["lucide-react"],
+          },
+        },
+      },
+    },
   };
 });

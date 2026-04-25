@@ -37,6 +37,7 @@ import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Sta
 import { JournalDialog } from "@/components/journal/JournalDialog";
 import { AlertCenter } from "@/components/alerts/AlertCenter";
 import { ScamCheckDialog } from "@/components/coach/ScamCheckDialog";
+import { FeedbackButton } from "@/components/FeedbackButton";
 import { OnboardingDialog } from "@/components/coach/OnboardingDialog";
 import { MacroRiskDialog } from "@/components/coach/MacroRiskDialog";
 import { StressModeBanner } from "@/components/coach/StressModeBanner";
@@ -664,6 +665,8 @@ const Index = () => {
           })
         }
       />
+
+      <FeedbackButton />
     </div>
   );
 };

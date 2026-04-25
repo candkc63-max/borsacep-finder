@@ -33,3 +33,4 @@ ios/DerivedData
 *.njsproj
 *.sln
 *.sw?
+.vercel

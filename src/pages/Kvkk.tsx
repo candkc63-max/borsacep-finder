@@ -44,9 +44,13 @@ const Kvkk = () => {
                     <td className="p-3">İşlem Güvenliği</td>
                     <td className="p-3">IP adresi, oturum bilgileri, şifreli parola</td>
                   </tr>
-                  <tr>
+                  <tr className="border-b border-border/50">
                     <td className="p-3">Kullanım Verileri</td>
                     <td className="p-3">Tarayıcı türü, cihaz bilgisi, erişim zamanı</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3">AI Sohbet İçerikleri</td>
+                    <td className="p-3">Eğitmen ve Koç ile yaptığınız sohbet metinleri (yatırımcı psikolojisi, teknik analiz soruları)</td>
                   </tr>
                 </tbody>
               </table>
@@ -82,8 +86,11 @@ const Kvkk = () => {
             <ul className="list-disc pl-6 space-y-1">
               <li><strong>Supabase Inc.</strong> — Kimlik doğrulama ve veritabanı hizmetleri (ABD merkezli, sunucular AWS altyapısında)</li>
               <li><strong>Google LLC</strong> — Google ile giriş yapmanız halinde (yalnızca sizin onayınızla)</li>
+              <li><strong>Anthropic PBC</strong> — Eğitmen ve Koç AI sohbet özellikleri (Claude modeli). AI sohbeti açtığınızda yazdığınız mesajlar Anthropic sunucularına iletilir, eğitim amacıyla saklanmaz, yalnızca yanıt üretmek için işlenir. Hassas finansal kimlik bilgisi (TCKN, hesap numarası vb.) yazmamanızı öneririz.</li>
+              <li><strong>Vercel Inc.</strong> — Web sitesi barındırma ve CDN hizmetleri (ABD merkezli)</li>
+              <li><strong>Yahoo Finance</strong> — Anonim BIST fiyat verisi okuma (kişisel veri aktarılmaz)</li>
             </ul>
-            <p>Yurt dışına veri aktarımı, KVKK'nın 9. maddesi kapsamında açık rızanıza dayanılarak gerçekleştirilmektedir.</p>
+            <p>Yurt dışına veri aktarımı, KVKK'nın 9. maddesi kapsamında açık rızanıza dayanılarak gerçekleştirilmektedir. AI sohbet özelliklerini kullandığınızda bu veri aktarımına onay vermiş sayılırsınız.</p>
           </section>
 
           <section>
