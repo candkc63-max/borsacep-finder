@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
 import { isInIndex } from "@/lib/indices";
 import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fundamentals";
-import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert, Globe, Sparkles } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert, Globe, Sparkles, PlayCircle } from "lucide-react";
 import { JournalDialog } from "@/components/journal/JournalDialog";
 import { AlertCenter } from "@/components/alerts/AlertCenter";
 import { ScamCheckDialog } from "@/components/coach/ScamCheckDialog";
@@ -415,6 +415,9 @@ const Index = () => {
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setOnboardingOpen(true)} className="h-8 w-8 p-0" title="Risk Profili">
               <Sparkles className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/videolar")} className="h-8 w-8 p-0" title="Video Kütüphanesi">
+              <PlayCircle className="w-3.5 h-3.5" />
             </Button>
             {user ? (
               <div className="flex items-center gap-1.5 ml-1">
