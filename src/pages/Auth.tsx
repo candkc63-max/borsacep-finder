@@ -69,19 +69,20 @@ const Auth = () => {
 
     setLoading(true);
     try {
-      const { lovable } = await import("@/integrations/lovable/index");
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      // Native Supabase OAuth — Vercel'de düzgün çalışır, Lovable cloud-auth'a bağımlı değil
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
       });
-      if (result.error) {
-        toast.error("Google ile giriş başarısız");
+      if (error) {
+        toast.error(error.message || "Google ile giriş başarısız");
         return;
       }
-      if (result.redirected) return;
-      toast.success("Giriş başarılı!");
-      navigate("/");
-    } catch {
-      toast.error("Google ile giriş başarısız");
+      // signInWithOAuth tarayıcıyı Google'a yönlendirir; başarılıysa otomatik dönüş yapar
+    } catch (err: any) {
+      toast.error(err?.message || "Google ile giriş başarısız");
     } finally {
       setLoading(false);
     }
