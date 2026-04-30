@@ -12,6 +12,7 @@ import KullanimKosullari from "./pages/KullanimKosullari.tsx";
 import Kvkk from "./pages/Kvkk.tsx";
 import YasalUyari from "./pages/YasalUyari.tsx";
 import Videolar from "./pages/Videolar.tsx";
+import Simulasyon from "./pages/Simulasyon.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/kvkk" element={<Kvkk />} />
             <Route path="/yasal-uyari" element={<YasalUyari />} />
             <Route path="/videolar" element={<Videolar />} />
+            <Route path="/simulasyon" element={<Simulasyon />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
