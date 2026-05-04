@@ -97,7 +97,7 @@ const Auth = () => {
             <Activity className="w-6 h-6 text-primary-foreground" />
           </div>
           <h1 className="text-xl font-bold text-foreground">
-            BORSACEP<span className="text-muted-foreground text-sm">.COM</span>
+            BORSA101<span className="text-muted-foreground text-sm">.COM</span>
           </h1>
           <p className="text-sm text-muted-foreground">
             {isLogin ? "Hesabınıza giriş yapın" : "Yeni hesap oluşturun"}

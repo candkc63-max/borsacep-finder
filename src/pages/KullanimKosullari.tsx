@@ -17,13 +17,13 @@ const KullanimKosullari = () => {
         <div className="prose prose-sm prose-invert max-w-none space-y-6 text-muted-foreground">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">1. Hizmet Tanımı</h2>
-            <p>BORSACEP (borsacep.com), BIST100 hisselerini teknik indikatörlerle tarayan ve AL/SAT/NÖTR sinyalleri üreten bir web uygulamasıdır. Platform yalnızca bilgilendirme amacıyla hizmet vermektedir.</p>
+            <p>BORSA101 (borsa101.com), BIST100 hisselerini teknik indikatörlerle tarayan ve AL/SAT/NÖTR sinyalleri üreten bir web uygulamasıdır. Platform yalnızca bilgilendirme amacıyla hizmet vermektedir.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">2. Yatırım Tavsiyesi Değildir</h2>
-            <p>Bu sitede sunulan tüm bilgiler, analizler ve sinyaller yalnızca bilgilendirme amaçlıdır. <strong>BORSACEP yatırım tavsiyesi vermez.</strong> Sitede yer alan hiçbir içerik, herhangi bir finansal aracın alım-satım önerisi olarak değerlendirilmemelidir.</p>
-            <p>Yatırım kararlarınız tamamen size aittir. Yatırım yapmadan önce lisanslı bir yatırım danışmanına başvurmanızı öneririz. BORSACEP, kullanıcıların yatırım kararlarından doğabilecek zararlardan sorumlu tutulamaz.</p>
+            <p>Bu sitede sunulan tüm bilgiler, analizler ve sinyaller yalnızca bilgilendirme amaçlıdır. <strong>BORSA101 yatırım tavsiyesi vermez.</strong> Sitede yer alan hiçbir içerik, herhangi bir finansal aracın alım-satım önerisi olarak değerlendirilmemelidir.</p>
+            <p>Yatırım kararlarınız tamamen size aittir. Yatırım yapmadan önce lisanslı bir yatırım danışmanına başvurmanızı öneririz. BORSA101, kullanıcıların yatırım kararlarından doğabilecek zararlardan sorumlu tutulamaz.</p>
           </section>
 
           <section>
@@ -55,12 +55,12 @@ const KullanimKosullari = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">6. Sorumluluk Sınırlaması</h2>
-            <p>BORSACEP, siteyi kullanmanız sonucunda doğrudan veya dolaylı olarak oluşabilecek herhangi bir zarardan sorumlu değildir. Bu sınırlama, finansal kayıplar, veri kaybı ve hizmet kesintileri dahil ancak bunlarla sınırlı olmamak üzere tüm zarar türlerini kapsar.</p>
+            <p>BORSA101, siteyi kullanmanız sonucunda doğrudan veya dolaylı olarak oluşabilecek herhangi bir zarardan sorumlu değildir. Bu sınırlama, finansal kayıplar, veri kaybı ve hizmet kesintileri dahil ancak bunlarla sınırlı olmamak üzere tüm zarar türlerini kapsar.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">7. Fikri Mülkiyet</h2>
-            <p>Site içeriği, tasarım, logo ve yazılım BORSACEP'e aittir. İzinsiz kopyalama, dağıtma veya değiştirme yasaktır.</p>
+            <p>Site içeriği, tasarım, logo ve yazılım BORSA101'e aittir. İzinsiz kopyalama, dağıtma veya değiştirme yasaktır.</p>
           </section>
 
           <section>
@@ -75,7 +75,7 @@ const KullanimKosullari = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">10. İletişim</h2>
-            <p>Kullanım koşulları hakkında sorularınız için <a href="mailto:info@borsacep.com" className="text-primary hover:underline">info@borsacep.com</a> adresinden bize ulaşabilirsiniz.</p>
+            <p>Kullanım koşulları hakkında sorularınız için <a href="mailto:info@borsa101.com" className="text-primary hover:underline">info@borsa101.com</a> adresinden bize ulaşabilirsiniz.</p>
           </section>
         </div>
       </div>

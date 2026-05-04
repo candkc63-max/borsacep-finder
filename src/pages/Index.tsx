@@ -361,7 +361,7 @@ const Index = () => {
     const alCount = results.filter(r => r.signal === "AL").length;
     if (prevAlCountRef.current !== null && alCount > prevAlCountRef.current) {
       const diff = alCount - prevAlCountRef.current;
-      sendNotification("BORSACEP - Yeni AL Sinyali!", `${diff} yeni hissede AL sinyali tespit edildi.`);
+      sendNotification("BORSA101 - Yeni AL Sinyali!", `${diff} yeni hissede AL sinyali tespit edildi.`);
     }
     prevAlCountRef.current = alCount;
   }, [results, sendNotification]);
@@ -378,7 +378,7 @@ const Index = () => {
               <Activity className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground tracking-tight">BORSACEP</h1>
+              <h1 className="text-lg font-bold text-foreground tracking-tight">BORSA101</h1>
               <p className="text-xs text-muted-foreground font-mono">.COM</p>
             </div>
           </div>

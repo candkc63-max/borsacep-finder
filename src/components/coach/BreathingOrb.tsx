@@ -16,7 +16,7 @@ const PHASE_LABEL: Record<Phase, string> = {
 
 /**
  * 4-7-8 nefes egzersizi — panik modunda sakinleştirici animasyon.
- * Primary token kullanır, borsacep temasına uyumlu.
+ * Primary token kullanır, borsa101 temasına uyumlu.
  */
 export function BreathingOrb() {
   const [phase, setPhase] = useState<Phase>("inhale");

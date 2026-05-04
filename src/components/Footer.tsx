@@ -11,7 +11,7 @@ export function Footer() {
               <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
                 <Activity className="w-4 h-4 text-primary-foreground" />
               </div>
-              <span className="font-bold text-foreground tracking-tight">BORSACEP</span>
+              <span className="font-bold text-foreground tracking-tight">BORSA101</span>
               <span className="text-xs text-muted-foreground font-mono">.COM</span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
@@ -43,7 +43,7 @@ export function Footer() {
             <h3 className="text-sm font-semibold text-foreground mb-3">İletişim</h3>
             <ul className="space-y-2 text-xs text-muted-foreground">
               <li>
-                <a href="mailto:info@borsacep.com" className="hover:text-foreground transition-colors">info@borsacep.com</a>
+                <a href="mailto:info@borsa101.com" className="hover:text-foreground transition-colors">info@borsa101.com</a>
               </li>
             </ul>
           </div>
@@ -51,7 +51,7 @@ export function Footer() {
 
         <div className="border-t border-border mt-8 pt-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground font-mono">
-            © {new Date().getFullYear()} BORSACEP. Tüm hakları saklıdır.
+            © {new Date().getFullYear()} BORSA101. Tüm hakları saklıdır.
           </p>
           <p className="text-xs text-muted-foreground">
             ⚠ Bu site yatırım tavsiyesi vermez. Yatırım kararlarınız tamamen size aittir.

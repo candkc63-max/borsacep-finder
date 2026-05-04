@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
 
-const FEEDBACK_EMAIL = "info@borsacep.com";
+const FEEDBACK_EMAIL = "info@borsa101.com";
 
 /**
  * Beta geri bildirim — küçük "Geri Bildirim" düğmesi.
@@ -40,7 +40,7 @@ export function FeedbackButton() {
       /* ignore */
     }
 
-    const subject = encodeURIComponent(`[Borsacep ${typeLabel(type)}] Geri bildirim`);
+    const subject = encodeURIComponent(`[Borsa101 ${typeLabel(type)}] Geri bildirim`);
     const body = encodeURIComponent(
       `Tür: ${typeLabel(type)}\n\nMesaj:\n${text}\n\n---\nGönderim: ${new Date().toLocaleString("tr-TR")}\nTarayıcı: ${navigator.userAgent}`,
     );
@@ -72,7 +72,7 @@ export function FeedbackButton() {
                 Geri Bildirim
               </h2>
               <p className="text-xs text-muted-foreground">
-                Borsacep beta sürümünde — hata, eksik veya öneri varsa yaz, bizzat okuyoruz.
+                Borsa101 beta sürümünde — hata, eksik veya öneri varsa yaz, bizzat okuyoruz.
               </p>
             </div>
 

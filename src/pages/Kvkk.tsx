@@ -18,7 +18,7 @@ const Kvkk = () => {
         <div className="prose prose-sm prose-invert max-w-none space-y-6 text-muted-foreground">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">1. Veri Sorumlusu</h2>
-            <p>BORSACEP (borsacep.com) olarak, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında veri sorumlusu sıfatıyla, kişisel verilerinizi aşağıda açıklanan çerçevede işlemekteyiz.</p>
+            <p>BORSA101 (borsa101.com) olarak, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında veri sorumlusu sıfatıyla, kişisel verilerinizi aşağıda açıklanan çerçevede işlemekteyiz.</p>
           </section>
 
           <section>
@@ -116,7 +116,7 @@ const Kvkk = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">8. Başvuru Yöntemi</h2>
-            <p>Yukarıda belirtilen haklarınızı kullanmak için <a href="mailto:info@borsacep.com" className="text-primary hover:underline">info@borsacep.com</a> adresine kimliğinizi tespit edici bilgiler ile birlikte yazılı olarak başvurabilirsiniz.</p>
+            <p>Yukarıda belirtilen haklarınızı kullanmak için <a href="mailto:info@borsa101.com" className="text-primary hover:underline">info@borsa101.com</a> adresine kimliğinizi tespit edici bilgiler ile birlikte yazılı olarak başvurabilirsiniz.</p>
             <p>Başvurunuz en geç 30 (otuz) gün içinde ücretsiz olarak sonuçlandırılacaktır. İşlemin ayrıca bir maliyet gerektirmesi halinde, Kişisel Verileri Koruma Kurulu tarafından belirlenen tarifedeki ücret alınabilir.</p>
           </section>
         </div>

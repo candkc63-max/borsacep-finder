@@ -17,7 +17,7 @@ const Gizlilik = () => {
         <div className="prose prose-sm prose-invert max-w-none space-y-6 text-muted-foreground">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">1. Genel Bilgi</h2>
-            <p>BORSACEP ("biz", "bizim" veya "Site"), borsacep.com adresi üzerinden hizmet veren bir BIST100 teknik analiz tarama platformudur. Kullanıcılarımızın gizliliğine saygı duyuyor ve kişisel verilerinizi korumayı taahhüt ediyoruz.</p>
+            <p>BORSA101 ("biz", "bizim" veya "Site"), borsa101.com adresi üzerinden hizmet veren bir BIST100 teknik analiz tarama platformudur. Kullanıcılarımızın gizliliğine saygı duyuyor ve kişisel verilerinizi korumayı taahhüt ediyoruz.</p>
           </section>
 
           <section>
@@ -69,7 +69,7 @@ const Gizlilik = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">8. İletişim</h2>
-            <p>Gizlilik politikamız hakkında sorularınız için <a href="mailto:info@borsacep.com" className="text-primary hover:underline">info@borsacep.com</a> adresinden bize ulaşabilirsiniz.</p>
+            <p>Gizlilik politikamız hakkında sorularınız için <a href="mailto:info@borsa101.com" className="text-primary hover:underline">info@borsa101.com</a> adresinden bize ulaşabilirsiniz.</p>
           </section>
         </div>
       </div>

@@ -18,7 +18,7 @@ const YasalUyari = () => {
           <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
           <div className="text-sm">
             <strong className="text-yellow-700 dark:text-yellow-400">Önemli:</strong>{" "}
-            Borsacep yatırım danışmanlığı veya aracılık hizmeti sunmaz. Site içeriği
+            Borsa101 yatırım danışmanlığı veya aracılık hizmeti sunmaz. Site içeriği
             yalnızca <strong>eğitim ve bilgilendirme</strong> amaçlıdır. Yatırım kararlarınız
             tamamen size aittir.
           </div>
@@ -33,7 +33,7 @@ const YasalUyari = () => {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">1. Yatırım Tavsiyesi Kapsamı Dışındadır</h2>
             <p>
-              Borsacep platformunda sunulan tüm bilgiler, sinyaller, AI yorumları, teknik
+              Borsa101 platformunda sunulan tüm bilgiler, sinyaller, AI yorumları, teknik
               analiz çıktıları, strateji önerileri, alarm bildirimleri ve sohbet asistanı
               cevapları <strong>SPK (Sermaye Piyasası Kurulu) tarafından düzenlenen yatırım
               danışmanlığı kapsamında değildir</strong>.
@@ -42,7 +42,7 @@ const YasalUyari = () => {
               6362 sayılı Sermaye Piyasası Kanunu uyarınca yatırım danışmanlığı; yalnızca
               SPK tarafından lisans almış aracı kurumlar ve yetkili kişiler tarafından
               <em> bireysel müşteri ile akdedilen yazılı sözleşme çerçevesinde</em> verilebilir.
-              Borsacep böyle bir lisansa sahip değildir ve sahip olduğunu iddia etmez.
+              Borsa101 böyle bir lisansa sahip değildir ve sahip olduğunu iddia etmez.
             </p>
           </section>
 
@@ -106,7 +106,7 @@ const YasalUyari = () => {
             <ul className="list-disc pl-6 space-y-1 mt-2">
               <li>Gerçek alım-satım kararlarınız öncesi <strong>brokerinizin canlı verisi</strong>
                 ile teyit yapmanız zorunludur.</li>
-              <li>Yanlış veriden doğan kayıplardan Borsacep sorumlu tutulamaz.</li>
+              <li>Yanlış veriden doğan kayıplardan Borsa101 sorumlu tutulamaz.</li>
             </ul>
           </section>
 
@@ -114,7 +114,7 @@ const YasalUyari = () => {
             <h2 className="text-lg font-semibold text-foreground mb-3">6. Üçüncü Taraf Bağlantılar</h2>
             <p>
               Sitede paylaşılan tweetler, makaleler, harici link veya gömülü içerikler
-              ilgili yazarın görüşlerini yansıtır. Borsacep bu içeriklerin doğruluğunu,
+              ilgili yazarın görüşlerini yansıtır. Borsa101 bu içeriklerin doğruluğunu,
               güncelliğini veya yatırım açısından uygunluğunu doğrulamaz, garantilemez ve
               <strong> sorumluluğunu üstlenmez</strong>.
             </p>
@@ -136,7 +136,7 @@ const YasalUyari = () => {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">8. Sorumluluk Sınırlaması</h2>
             <p>
-              Borsacep ve geliştiricileri, sitenin kullanımı sonucu doğrudan veya dolaylı
+              Borsa101 ve geliştiricileri, sitenin kullanımı sonucu doğrudan veya dolaylı
               olarak ortaya çıkabilecek <strong>maddi veya manevi hiçbir kayıp, zarar veya
               fırsat maliyeti için sorumlu tutulamaz</strong>. Bu, sınırlama olmaksızın şunları
               içerir: yatırım kayıpları, fırsat kayıpları, veri kaybı, sistem kesintileri.
@@ -146,7 +146,7 @@ const YasalUyari = () => {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">9. Mevzuat ve Yetkili Mahkeme</h2>
             <p>
-              Bu site Türkiye Cumhuriyeti yasalarına tabidir. Borsacep ile kullanıcı arasında
+              Bu site Türkiye Cumhuriyeti yasalarına tabidir. Borsa101 ile kullanıcı arasında
               doğabilecek uyuşmazlıklarda <strong>İstanbul (Çağlayan) Mahkemeleri ve İcra
               Daireleri</strong> yetkilidir.
             </p>
@@ -156,14 +156,14 @@ const YasalUyari = () => {
             <h2 className="text-lg font-semibold text-foreground mb-3">10. İletişim</h2>
             <p>
               Bu yasal uyarıyla ilgili sorularınız için:{" "}
-              <a href="mailto:info@borsacep.com" className="text-primary hover:underline">
-                info@borsacep.com
+              <a href="mailto:info@borsa101.com" className="text-primary hover:underline">
+                info@borsa101.com
               </a>
             </p>
           </section>
 
           <div className="rounded-md border border-border bg-muted/30 p-4 mt-6 text-xs">
-            <strong className="text-foreground">Onay:</strong> Borsacep'i kullanmaya devam
+            <strong className="text-foreground">Onay:</strong> Borsa101'i kullanmaya devam
             ederek yukarıdaki tüm maddeleri okuduğunuzu, anladığınızı ve kabul ettiğinizi
             beyan etmiş olursunuz.
           </div>

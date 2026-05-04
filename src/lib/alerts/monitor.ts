@@ -14,7 +14,7 @@ export interface TriggeredAlert {
 /**
  * Alert monitor — stockData her değiştiğinde armed alarmları değerlendirir.
  *
- * Borsacep zaten useBistStocks ile 60 saniyede fiyat güncelliyor,
+ * Borsa101 zaten useBistStocks ile 60 saniyede fiyat güncelliyor,
  * ekstra polling gerekmez. Sadece subscribe oluyoruz.
  */
 export function useAlertMonitor(

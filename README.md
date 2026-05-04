@@ -1,4 +1,4 @@
-# BORSACEP - BIST100 Teknik Analiz Tarama Uygulaması
+# BORSA101 - BIST100 Teknik Analiz Tarama Uygulaması
 
 BIST100 hisselerini teknik indikatörlerle tarayan, AL/SAT/NÖTR sinyalleri üreten bir web uygulaması.
 
