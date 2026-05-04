@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        { "type": "host", "value": "borsacep.com" }
+      ],
+      "destination": "https://borsa101.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        { "type": "host", "value": "www.borsacep.com" }
+      ],
+      "destination": "https://borsa101.com/:path*",
+      "permanent": true
+    }
+  ]
+}
