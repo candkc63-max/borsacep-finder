@@ -20,8 +20,14 @@ initNative();
 const root = createRoot(document.getElementById("root")!);
 
 import("./App.tsx")
-  .then(({ default: App }) => {
-    root.render(<App />);
+  .then(async ({ default: App }) => {
+    const { Analytics } = await import("@vercel/analytics/react");
+    root.render(
+      <>
+        <App />
+        <Analytics />
+      </>
+    );
   })
   .catch(() => {
     root.render(
