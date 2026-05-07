@@ -30,10 +30,12 @@ BIST100_TICKERS: list[str] = [
 # ---------------------------------------------------------------------------
 # Tarama parametreleri
 # ---------------------------------------------------------------------------
-LOOKBACK_DAYS: int = 120  # 50 SMA + 2x21 günlük hacim için yeterli geçmiş
 SMA_PERIOD: int = 50  # Hareketli ortalama uzunluğu
 VOLUME_WINDOW: int = 21  # ~1 ay (işlem günü)
 VOLUME_INCREASE_THRESHOLD: float = 0.50  # %50
+MIN_REQUIRED_ROWS: int = SMA_PERIOD + 2 * VOLUME_WINDOW
+LOOKBACK_BUFFER_DAYS: int = 30  # Borsa tatilleri/eksik seanslar için güvenlik payı
+LOOKBACK_DAYS: int = int((MIN_REQUIRED_ROWS * 7 / 5) + LOOKBACK_BUFFER_DAYS)
 
 
 def analyze_ticker(symbol: str) -> Optional[dict]:
@@ -64,8 +66,8 @@ def analyze_ticker(symbol: str) -> Optional[dict]:
 
     df = df.dropna(subset=["Close", "Volume"])
 
-    # Yeterli veri var mı?
-    if len(df) < SMA_PERIOD + 2 * VOLUME_WINDOW:
+    # Yeterli işlem günü var mı?
+    if len(df) < MIN_REQUIRED_ROWS:
         return None
 
     # 50 günlük SMA
@@ -74,7 +76,7 @@ def analyze_ticker(symbol: str) -> Optional[dict]:
     last_close = float(df["Close"].iloc[-1])
     last_sma = float(df["SMA50"].iloc[-1])
 
-    # Hacim karşılaştırması: son 21 gün vs önceki 21 gün
+    # Hacim karşılaştırması: son 21 işlem günü vs önceki 21 işlem günü
     last_month_vol = float(df["Volume"].iloc[-VOLUME_WINDOW:].mean())
     prev_month_vol = float(df["Volume"].iloc[-2 * VOLUME_WINDOW : -VOLUME_WINDOW].mean())
 
