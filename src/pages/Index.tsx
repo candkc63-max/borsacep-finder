@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
 import { isInIndex } from "@/lib/indices";
 import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fundamentals";
-import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert, Globe, Sparkles, PlayCircle, Rewind, BarChart3, Wrench, User, ChevronDown } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert, Globe, Sparkles, PlayCircle, Rewind, BarChart3, Wrench, User, ChevronDown, MessageSquare } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { JournalDialog } from "@/components/journal/JournalDialog";
@@ -422,6 +422,9 @@ const Index = () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/videolar")}>
                   <PlayCircle className="w-4 h-4 mr-2" /> Video Kütüphanesi
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/forum")}>
+                  <MessageSquare className="w-4 h-4 mr-2" /> Forum (Üye Sohbeti)
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel>Risk & Güvenlik</DropdownMenuLabel>

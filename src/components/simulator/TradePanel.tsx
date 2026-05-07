@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ArrowDownRight, ArrowUpRight, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { calcOpenPnl, calcRealizedPnl } from "@/lib/simulator/engine";
+import { BSMV_RATE } from "@/lib/simulator/types";
 import type { SimPosition } from "@/lib/simulator/types";
 import { cn } from "@/lib/utils";
 
@@ -42,10 +43,19 @@ export function TradePanel({
   const totalEquity = capital + totalUnrealized;
   const totalPnl = totalEquity - initialCapital;
   const totalPnlPct = (totalPnl / initialCapital) * 100;
+  const quantityNum = Number.parseFloat(quantity);
+  const hasValidQuantity = Number.isFinite(quantityNum) && quantityNum > 0;
+  const orderValue = hasValidQuantity ? quantityNum * currentPrice : 0;
+  const entryCommission = orderValue * commissionPct;
+  const entryBsmv = entryCommission * BSMV_RATE;
+  const buyTotalCost = orderValue + entryCommission + entryBsmv;
+  const hasInsufficientCapital = hasValidQuantity && buyTotalCost > capital;
+  const missingAmount = hasInsufficientCapital ? buyTotalCost - capital : 0;
 
   function handleOpen(side: "long" | "short") {
     const q = parseFloat(quantity);
     if (!q || q <= 0) return;
+    if (side === "long" && buyTotalCost > capital) return;
     onOpen({
       side,
       quantity: q,
@@ -107,7 +117,8 @@ export function TradePanel({
             <Input
               id="sim-qty"
               type="number"
-              min="1"
+              min="0.01"
+              step="0.01"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               className="h-7 text-xs"
@@ -142,10 +153,45 @@ export function TradePanel({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-2 rounded-md border border-border/70 bg-muted/30 p-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Fiyat (TL)</span>
+              <span className="font-mono">₺{currentPrice.toFixed(2)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">Tutar (Adet x Fiyat)</span>
+              <span className="font-mono font-semibold">₺{orderValue.toFixed(2)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">
+                Komisyon + BSMV ({(commissionPct * 100).toFixed(2)}%)
+              </span>
+              <span className="font-mono">₺{(entryCommission + entryBsmv).toFixed(2)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">Alış Toplamı</span>
+              <span className="font-mono font-semibold">₺{buyTotalCost.toFixed(2)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">Nakit</span>
+              <span className="font-mono">₺{capital.toFixed(2)}</span>
+            </div>
+            {!hasValidQuantity && (
+              <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-1.5 text-[11px] text-amber-300">
+                Tutar hesaplamak ve alım yapmak için geçerli bir adet gir.
+              </div>
+            )}
+            {hasInsufficientCapital && (
+              <div className="mt-2 rounded border border-bearish/40 bg-bearish/10 p-1.5 text-[11px] text-bearish">
+                Yetersiz bakiye: Alış için en az ₺{buyTotalCost.toFixed(2)} gerekiyor. Eksik: ₺
+                {missingAmount.toFixed(2)}
+              </div>
+            )}
+          </div>
           <Button
             type="button"
             onClick={() => handleOpen("long")}
-            disabled={!quantity}
+            disabled={!hasValidQuantity || hasInsufficientCapital}
             className="h-8 bg-bullish hover:bg-bullish/90 text-white text-xs"
           >
             <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> Alış
@@ -153,7 +199,7 @@ export function TradePanel({
           <Button
             type="button"
             onClick={() => handleOpen("short")}
-            disabled={!quantity}
+            disabled={!hasValidQuantity}
             className="h-8 bg-bearish hover:bg-bearish/90 text-white text-xs"
           >
             <ArrowDownRight className="w-3.5 h-3.5 mr-1" /> Açığa Sat

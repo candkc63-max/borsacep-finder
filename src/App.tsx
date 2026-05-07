@@ -15,6 +15,9 @@ import Videolar from "./pages/Videolar.tsx";
 import Simulasyon from "./pages/Simulasyon.tsx";
 import Screener from "./pages/Screener.tsx";
 import PozisyonHesaplayici from "./pages/PozisyonHesaplayici.tsx";
+import Forum from "./pages/Forum.tsx";
+import ForumYeni from "./pages/ForumYeni.tsx";
+import ForumPost from "./pages/ForumPost.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -38,6 +41,9 @@ const App = () => (
             <Route path="/simulasyon" element={<Simulasyon />} />
             <Route path="/screener" element={<Screener />} />
             <Route path="/araclar/pozisyon-hesaplayici" element={<PozisyonHesaplayici />} />
+            <Route path="/forum" element={<Forum />} />
+            <Route path="/forum/yeni" element={<ForumYeni />} />
+            <Route path="/forum/:id" element={<ForumPost />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
