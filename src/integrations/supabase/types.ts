@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          subscription_tier: string
           updated_at: string
           user_id: string
         }
@@ -28,6 +29,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          subscription_tier?: string
           updated_at?: string
           user_id: string
         }
@@ -36,7 +38,47 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          subscription_tier?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      position_calculator_saves: {
+        Row: {
+          account_size: number
+          created_at: string
+          entry: number
+          id: string
+          results: Json
+          risk_pct: number
+          stop: number
+          symbol: string | null
+          target: number
+          user_id: string
+        }
+        Insert: {
+          account_size: number
+          created_at?: string
+          entry: number
+          id?: string
+          results?: Json
+          risk_pct: number
+          stop: number
+          symbol?: string | null
+          target: number
+          user_id: string
+        }
+        Update: {
+          account_size?: number
+          created_at?: string
+          entry?: number
+          id?: string
+          results?: Json
+          risk_pct?: number
+          stop?: number
+          symbol?: string | null
+          target?: number
           user_id?: string
         }
         Relationships: []

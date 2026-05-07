@@ -33,7 +33,9 @@ import { cn } from "@/lib/utils";
 import { getSector, type Sector } from "@/lib/sectors";
 import { isInIndex } from "@/lib/indices";
 import { getFundamentals, getMarketCapBucket, matchPe, matchDiv } from "@/lib/fundamentals";
-import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert, Globe, Sparkles, PlayCircle, Rewind, BarChart3 } from "lucide-react";
+import { Activity, Filter, Wifi, WifiOff, Loader2, LogIn, LogOut, RefreshCw, Star, Sun, Moon, Bell, BellOff, Briefcase, Clock, BookOpen, BellRing, ShieldAlert, Globe, Sparkles, PlayCircle, Rewind, BarChart3, Wrench, User, ChevronDown } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { OnboardingTour } from "@/components/OnboardingTour";
 import { JournalDialog } from "@/components/journal/JournalDialog";
 import { AlertCenter } from "@/components/alerts/AlertCenter";
 import { ScamCheckDialog } from "@/components/coach/ScamCheckDialog";
@@ -401,22 +403,79 @@ const Index = () => {
                 </>
               )}
             </div>
-            <Button variant="ghost" size="sm" onClick={() => refetch()} className="h-8 w-8 p-0" title="Verileri yenile">
-              <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={toggleTheme} className="h-8 w-8 p-0" title={theme === "dark" ? "Aydınlık tema" : "Karanlık tema"}>
-              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={toggleNotifications} className="h-8 w-8 p-0" title={notifEnabled ? "Bildirimleri kapat" : "Bildirimleri aç"}>
-              {notifEnabled ? <Bell className="w-3.5 h-3.5 text-primary" /> : <BellOff className="w-3.5 h-3.5" />}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowPortfolio(!showPortfolio)} className={cn("h-8 w-8 p-0", showPortfolio && "bg-primary/10")} title="Portföy">
-              <Briefcase className="w-3.5 h-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setJournalOpen(true)} className="h-8 w-8 p-0" title="Trade Journal">
-              <BookOpen className="w-3.5 h-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setAlertCenterOpen(true)} className="h-8 w-8 p-0 relative" title="Alarmlar">
+            {/* Araçlar dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2.5" data-tour="tools">
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-xs font-semibold">Araçlar</span>
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Analiz Araçları</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => navigate("/screener")}>
+                  <BarChart3 className="w-4 h-4 mr-2" /> Temel Analiz Tarayıcı
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/simulasyon")}>
+                  <Rewind className="w-4 h-4 mr-2" /> Bar Replay Simülasyonu
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/videolar")}>
+                  <PlayCircle className="w-4 h-4 mr-2" /> Video Kütüphanesi
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Risk & Güvenlik</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setScamCheckOpen(true)}>
+                  <ShieldAlert className="w-4 h-4 mr-2" /> Scam / Guru Kontrolü
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setMacroOpen(true)}>
+                  <Globe className="w-4 h-4 mr-2" /> Makro Risk Paneli
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Hesabım dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2.5" data-tour="account">
+                  <User className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-xs font-semibold">Hesabım</span>
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {user && (
+                  <>
+                    <DropdownMenuLabel className="font-mono text-[11px] text-muted-foreground truncate">
+                      {user.email}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem onClick={() => setShowPortfolio(!showPortfolio)}>
+                  <Briefcase className="w-4 h-4 mr-2" /> Portföyüm
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setJournalOpen(true)}>
+                  <BookOpen className="w-4 h-4 mr-2" /> Trade Journal
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setOnboardingOpen(true)}>
+                  <Sparkles className="w-4 h-4 mr-2" /> Risk Profilim
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {user ? (
+                  <DropdownMenuItem onClick={signOut}>
+                    <LogOut className="w-4 h-4 mr-2" /> Çıkış Yap
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={() => navigate("/auth")}>
+                    <LogIn className="w-4 h-4 mr-2" /> Giriş / Üye Ol
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Alarmlar — bildirim badge'li tek buton */}
+            <Button variant="ghost" size="sm" onClick={() => setAlertCenterOpen(true)} className="h-8 w-8 p-0 relative" title="Alarmlar" data-tour="alerts">
               <BellRing className="w-3.5 h-3.5" />
               {armedCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
@@ -424,32 +483,19 @@ const Index = () => {
                 </span>
               )}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setScamCheckOpen(true)} className="h-8 w-8 p-0" title="Scam / Guru kontrolü">
-              <ShieldAlert className="w-3.5 h-3.5" />
+
+            {/* Hızlı erişim: yenile + tema + bildirim */}
+            <Button variant="ghost" size="sm" onClick={() => refetch()} className="h-8 w-8 p-0" title="Verileri yenile">
+              <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setMacroOpen(true)} className="h-8 w-8 p-0" title="Makro Risk Paneli">
-              <Globe className="w-3.5 h-3.5" />
+            <Button variant="ghost" size="sm" onClick={toggleTheme} className="h-8 w-8 p-0" title={theme === "dark" ? "Aydınlık tema" : "Karanlık tema"}>
+              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setOnboardingOpen(true)} className="h-8 w-8 p-0" title="Risk Profili">
-              <Sparkles className="w-3.5 h-3.5" />
+            <Button variant="ghost" size="sm" onClick={toggleNotifications} className="h-8 w-8 p-0 hidden sm:inline-flex" title={notifEnabled ? "Bildirimleri kapat" : "Bildirimleri aç"}>
+              {notifEnabled ? <Bell className="w-3.5 h-3.5 text-primary" /> : <BellOff className="w-3.5 h-3.5" />}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/videolar")} className="h-8 w-8 p-0" title="Video Kütüphanesi">
-              <PlayCircle className="w-3.5 h-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/simulasyon")} className="h-8 w-8 p-0" title="Bar Replay Simülasyonu">
-              <Rewind className="w-3.5 h-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/screener")} className="h-8 w-8 p-0" title="Temel Analiz Tarayıcı">
-              <BarChart3 className="w-3.5 h-3.5" />
-            </Button>
-            {user ? (
-              <div className="flex items-center gap-1.5 ml-1">
-                <span className="text-xs font-mono text-muted-foreground hidden sm:inline truncate max-w-[100px]">{user.email}</span>
-                <Button variant="ghost" size="sm" onClick={signOut} className="h-8 px-2">
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : (
+
+            {!user && (
               <Button variant="default" size="sm" onClick={() => navigate("/auth")} className="h-8 gap-1.5 font-semibold ml-1">
                 <LogIn className="w-4 h-4" />
                 Üye Ol
@@ -542,7 +588,9 @@ const Index = () => {
             <Filter className="w-3.5 h-3.5" />
             Strateji Seçin
           </h2>
-          <StrategySelector selected={strategy} onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }} strategies={filteredStrategies} />
+          <div data-tour="strategy">
+            <StrategySelector selected={strategy} onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }} strategies={filteredStrategies} />
+          </div>
         </section>
 
         {/* Quick Filters: presets + AL/SAT/Favoriler + Sektör */}
@@ -693,6 +741,7 @@ const Index = () => {
       />
 
       <FeedbackButton />
+      <OnboardingTour />
     </div>
   );
 };

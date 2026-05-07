@@ -4,7 +4,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border bg-card/50 mt-12">
       <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -17,6 +17,28 @@ export function Footer() {
             <p className="text-xs text-muted-foreground leading-relaxed">
               BIST100 hisselerini teknik indikatörlerle tarayın. EMA, RSI, MACD ve Bollinger bantları ile AL/SAT sinyalleri alın.
             </p>
+          </div>
+
+          {/* Araçlar */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Araçlar</h3>
+            <ul className="space-y-2 text-xs text-muted-foreground">
+              <li>
+                <a href="/araclar/pozisyon-hesaplayici" className="hover:text-foreground transition-colors">
+                  Pozisyon hesaplayıcı
+                </a>
+              </li>
+              <li>
+                <a href="/screener" className="hover:text-foreground transition-colors">
+                  Temel analiz tarayıcı
+                </a>
+              </li>
+              <li>
+                <a href="/simulasyon" className="hover:text-foreground transition-colors">
+                  Simülasyon
+                </a>
+              </li>
+            </ul>
           </div>
 
           {/* Yasal */}
