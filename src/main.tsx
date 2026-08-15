@@ -1,31 +1,19 @@
 import { createRoot } from "react-dom/client";
 import "./index.css";
 
-// Capacitor plugins - only load on native platforms
-async function initNative() {
-  try {
-    const { Capacitor } = await import("@capacitor/core");
-    if (Capacitor.isNativePlatform()) {
-      const { StatusBar, Style } = await import("@capacitor/status-bar");
-      const { SplashScreen } = await import("@capacitor/splash-screen");
-      StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-      StatusBar.setBackgroundColor({ color: "#09090b" }).catch(() => {});
-      SplashScreen.hide().catch(() => {});
-    }
-  } catch {}
-}
-
-initNative();
-
 const root = createRoot(document.getElementById("root")!);
 
 import("./App.tsx")
   .then(async ({ default: App }) => {
-    const { Analytics } = await import("@vercel/analytics/react");
+    let Analytics: React.ComponentType | null = null;
+    try {
+      const mod = await import("@vercel/analytics/react");
+      Analytics = mod.Analytics;
+    } catch {}
     root.render(
       <>
         <App />
-        <Analytics />
+        {Analytics && <Analytics />}
       </>
     );
   })
