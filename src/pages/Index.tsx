@@ -13,7 +13,7 @@ import {
   sma200BreakUp, sma200BreakDown, priceAboveSma, priceBelowSma,
   recentGoldenCross, recentDeathCross, is52WeekHighBreak,
   rsiOversoldBouncing, strongMomentum,
-  type StrategyId, type Signal, type Timeframe,
+  type StrategyId, type Signal, type Timeframe, type StrategyResult,
 } from "@/lib/indicators";
 import { StrategySelector } from "@/components/StrategySelector";
 import { StockTable } from "@/components/StockTable";
@@ -369,39 +369,31 @@ const Index = () => {
   }, [results, sendNotification]);
 
   const filteredCount = signalFilter === "ALL" ? results.length : signalFilter === "FAV" ? results.filter(r => isFavorite(r.symbol)).length : results.filter(r => r.signal === signalFilter).length;
+  const activeStrategy = strategies.find((s) => s.id === strategy) ?? strategies[0];
+  const gainers = [...results].sort((a, b) => b.change - a.change).slice(0, 4);
+  const losers = [...results].sort((a, b) => a.change - b.change).slice(0, 4);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-              <Activity className="w-5 h-5 text-primary-foreground" />
+    <div className="min-h-screen bg-transparent">
+      <header className="sticky top-0 z-20 border-b border-border/80 bg-background/40 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1480px] items-center gap-3 px-4 py-3">
+          <div className="flex shrink-0 items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground shadow-[0_0_28px_hsl(var(--primary)/0.35)]">
+              <Activity className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground tracking-tight">BORSA101</h1>
-              <p className="text-xs text-muted-foreground font-mono">.COM</p>
+            <div className="leading-none">
+              <h1 className="text-[15px] font-extrabold tracking-tight text-foreground">BORSA101</h1>
+              <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">BIST masa</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="hidden sm:flex items-center gap-2 mr-2">
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
-                  <span className="text-xs font-mono text-muted-foreground">Yükleniyor...</span>
-                </>
-              ) : isLive ? (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-bullish" />
-                  <span className="text-xs font-mono text-muted-foreground">Canlı</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3.5 h-3.5 text-bearish" />
-                  <span className="text-xs font-mono text-muted-foreground">Simülasyon</span>
-                </>
-              )}
+
+          <div className="hidden min-w-0 flex-1 md:mx-6 md:block md:max-w-xl">
+            <StockSearch value={searchQuery} onChange={setSearchQuery} />
+          </div>
+
+          <div className="ml-auto flex items-center gap-1">
+            <div className="mr-1 hidden items-center lg:flex">
+              <LiveStatus isLoading={isLoading} isLive={isLive} />
             </div>
             {/* Araçlar dropdown */}
             <DropdownMenu>
@@ -508,9 +500,9 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 space-y-6">
+      <main className="mx-auto max-w-[1480px] space-y-5 px-4 py-5">
         {isError && (
-          <div className="rounded-lg border border-bearish bg-bearish/10 p-4 text-sm text-bearish flex items-center justify-between">
+          <div className="flex items-center justify-between rounded-xl border border-bearish bg-bearish/10 p-4 text-sm text-bearish">
             <span>Canlı veri alınamadı. Simülasyon verileri gösteriliyor.</span>
             <Button variant="outline" size="sm" onClick={() => refetch()} className="border-bearish text-bearish hover:bg-bearish/20">
               <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -549,31 +541,60 @@ const Index = () => {
           </div>
         )}
 
-        {/* Timeframe Filter */}
-        <section>
-          <h2 className="text-sm font-mono text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Clock className="w-3.5 h-3.5" />
-            Vade Seçin
-          </h2>
-          <div className="flex gap-2 flex-wrap">
-            {timeframeFilters.map(f => (
-              <button
-                key={f.value}
-                onClick={() => setTimeframeFilter(f.value)}
-                className={cn(
-                  "px-4 py-2 rounded-lg text-sm font-semibold transition-all",
-                  timeframeFilter === f.value
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
+        <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-card/50 backdrop-blur-md">
+          <div className="relative grid gap-6 p-5 lg:grid-cols-[1.15fr_0.85fr] lg:p-7">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-2.5 py-1">
+                  <LiveStatus isLoading={isLoading} isLive={isLive} />
+                </span>
+                <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                  {activeStrategy.style} · {activeStrategy.name}
+                </span>
+              </div>
+              <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+                BIST100 taraması, tek bakışta.
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                {activeStrategy.description}. Vadeyi ve stratejiyi soldan seç, sinyali kartlardan süz, satırı açınca grafiğe in.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {timeframeFilters.map(f => (
+                  <button
+                    key={f.value}
+                    onClick={() => setTimeframeFilter(f.value)}
+                    className={cn(
+                      "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all",
+                      timeframeFilter === f.value
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-background/70 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 md:hidden">
+                <StockSearch value={searchQuery} onChange={setSearchQuery} />
+              </div>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-background/50 p-3 backdrop-blur-sm">
+              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Piyasa nabzı · {results.length} hisse</p>
+              <SignalSummary
+                results={results}
+                active={signalFilter}
+                onSelect={(sig) => setSignalFilter(signalFilter === sig ? "ALL" : sig)}
+              />
+            </div>
           </div>
+          {(gainers.length > 0 || losers.length > 0) && (
+            <div className="relative grid border-t border-border sm:grid-cols-2">
+              <MoverStrip title="Yükselenler" items={gainers} onPick={(sym) => { stress.recordCheck(); setSelectedSymbol(sym); }} positive />
+              <MoverStrip title="Düşenler" items={losers} onPick={(sym) => { stress.recordCheck(); setSelectedSymbol(sym); }} />
+            </div>
+          )}
         </section>
 
-        {/* Stres Modu uyarı banner'ı */}
         <StressModeBanner
           stress={stress}
           onAskCoach={() =>
@@ -585,91 +606,94 @@ const Index = () => {
           }
         />
 
-        {/* Strategy Selector */}
-        <section>
-          <h2 className="text-sm font-mono text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5" />
-            Strateji Seçin
-          </h2>
-          <div data-tour="strategy">
-            <StrategySelector selected={strategy} onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }} strategies={filteredStrategies} />
-          </div>
-        </section>
-
-        {/* Quick Filters: presets + AL/SAT/Favoriler + Sektör */}
-        <QuickFilters
-          onlyBuy={onlyBuy}
-          onlySell={onlySell}
-          onlyFavorites={onlyFavorites}
-          sector={sectorFilter}
-          preset={preset}
-          onToggleBuy={() => { setOnlyBuy(v => !v); if (!onlyBuy) setOnlySell(false); }}
-          onToggleSell={() => { setOnlySell(v => !v); if (!onlySell) setOnlyBuy(false); }}
-          onToggleFavorites={() => setOnlyFavorites(v => !v)}
-          onSectorChange={setSectorFilter}
-          onPresetChange={setPreset}
-        />
-
-        {/* Advanced Filters: RSI / MACD / EMA / Bollinger / Volume */}
-        <AdvancedFilters value={advFilters} onChange={setAdvFilters} />
-
-        {/* Summary */}
-        <SignalSummary results={results} />
-
-        {/* Search + Signal Filter + Table */}
-        <section>
-          <div className="mb-3">
-            <StockSearch value={searchQuery} onChange={setSearchQuery} />
-          </div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-mono text-muted-foreground uppercase tracking-wider">
-              Tarama Sonuçları ({filteredCount} hisse)
-            </h2>
-            <div className="flex gap-1 flex-wrap">
-              {signalFilters.map(f => (
-                <button
-                  key={f.value}
-                  onClick={() => setSignalFilter(f.value)}
-                  aria-label={`${f.label} filtresi`}
-                  className={cn(
-                    "px-3 py-1.5 rounded-md text-xs font-mono font-semibold transition-colors",
-                    signalFilter === f.value
-                      ? f.value === "AL" ? "bg-bullish/10 text-bullish border border-bullish"
-                        : f.value === "SAT" ? "bg-bearish/10 text-bearish border border-bearish"
-                        : f.value === "FAV" ? "bg-yellow-400/10 text-yellow-500 border border-yellow-400"
-                        : "bg-primary/10 text-primary border border-primary"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {f.value === "FAV" ? <Star className="w-3 h-3 inline-block mr-1" /> : null}
-                  {f.label}
-                </button>
-              ))}
+        <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="space-y-3 lg:sticky lg:top-[76px]">
+            <div className="rounded-2xl border border-border bg-card p-3" data-tour="strategy">
+              <h2 className="mb-2 flex items-center gap-2 px-1 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                <Filter className="h-3.5 w-3.5" />
+                Strateji
+              </h2>
+              <StrategySelector
+                layout="rail"
+                selected={strategy}
+                onSelect={(id) => { setStrategy(id); setSignalFilter("ALL"); }}
+                strategies={filteredStrategies}
+              />
             </div>
-          </div>
-          {isLoading && !liveStocks ? (
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              <div className="p-4 space-y-3">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 animate-pulse">
-                    <div className="h-4 w-16 bg-muted rounded" />
-                    <div className="h-4 w-32 bg-muted rounded" />
-                    <div className="h-4 w-20 bg-muted rounded ml-auto" />
-                    <div className="h-6 w-14 bg-muted rounded-full" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <StockTable
-              results={results}
-              filter={signalFilter}
-              onStockClick={(sym) => { stress.recordCheck(); setSelectedSymbol(sym); }}
-              isFavorite={isFavorite}
-              toggleFavorite={toggleFavorite}
+            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+              <Clock className="mr-1 inline h-3 w-3" />
+              Vade değişince liste o vadeye uygun stratejilere iner.
+            </p>
+          </aside>
+
+          <div className="min-w-0 space-y-4">
+            <QuickFilters
+              onlyBuy={onlyBuy}
+              onlySell={onlySell}
+              onlyFavorites={onlyFavorites}
+              sector={sectorFilter}
+              preset={preset}
+              onToggleBuy={() => { setOnlyBuy(v => !v); if (!onlyBuy) setOnlySell(false); }}
+              onToggleSell={() => { setOnlySell(v => !v); if (!onlySell) setOnlyBuy(false); }}
+              onToggleFavorites={() => setOnlyFavorites(v => !v)}
+              onSectorChange={setSectorFilter}
+              onPresetChange={setPreset}
             />
-          )}
-        </section>
+
+            <AdvancedFilters value={advFilters} onChange={setAdvFilters} />
+
+            <section>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  Masa · {filteredCount} hisse
+                </h2>
+                <div className="flex flex-wrap gap-1">
+                  {signalFilters.map(f => (
+                    <button
+                      key={f.value}
+                      onClick={() => setSignalFilter(f.value)}
+                      aria-label={`${f.label} filtresi`}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-mono font-semibold transition-colors",
+                        signalFilter === f.value
+                          ? f.value === "AL" ? "bg-bullish/10 text-bullish border-bullish"
+                            : f.value === "SAT" ? "bg-bearish/10 text-bearish border-bearish"
+                            : f.value === "FAV" ? "bg-yellow-400/10 text-yellow-500 border-yellow-400"
+                            : "bg-primary/10 text-primary border-primary"
+                          : "border-transparent bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {f.value === "FAV" ? <Star className="mr-1 inline-block h-3 w-3" /> : null}
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {isLoading && !liveStocks ? (
+                <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                  <div className="space-y-3 p-4">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div key={i} className="flex animate-pulse items-center gap-4">
+                        <div className="h-4 w-16 rounded bg-muted" />
+                        <div className="h-4 w-32 rounded bg-muted" />
+                        <div className="ml-auto h-4 w-20 rounded bg-muted" />
+                        <div className="h-6 w-14 rounded-full bg-muted" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <StockTable
+                  results={results}
+                  filter={signalFilter}
+                  onStockClick={(sym) => { stress.recordCheck(); setSelectedSymbol(sym); }}
+                  isFavorite={isFavorite}
+                  toggleFavorite={toggleFavorite}
+                />
+              )}
+            </section>
+          </div>
+        </div>
       </main>
 
       <Footer />
@@ -748,6 +772,61 @@ const Index = () => {
     </div>
   );
 };
+
+function LiveStatus({ isLoading, isLive }: { isLoading: boolean; isLive: boolean }) {
+  if (isLoading) {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Yükleniyor
+      </span>
+    );
+  }
+  if (isLive) {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-bullish">
+        <Wifi className="h-3.5 w-3.5" /> Canlı
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-bearish">
+      <WifiOff className="h-3.5 w-3.5" /> Simülasyon
+    </span>
+  );
+}
+
+function MoverStrip({
+  title,
+  items,
+  onPick,
+  positive,
+}: {
+  title: string;
+  items: StrategyResult[];
+  onPick: (symbol: string) => void;
+  positive?: boolean;
+}) {
+  return (
+    <div className={cn("px-5 py-3", positive ? "" : "border-t border-border sm:border-l sm:border-t-0")}>
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <button
+            key={item.symbol}
+            type="button"
+            onClick={() => onPick(item.symbol)}
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs transition-colors hover:border-primary/50"
+          >
+            <span className="font-mono font-bold text-foreground">{item.symbol}</span>
+            <span className={cn("font-mono font-semibold", item.change >= 0 ? "text-bullish" : "text-bearish")}>
+              {item.change >= 0 ? "+" : ""}{item.change.toFixed(2)}%
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function buildAlertSeed(t: TriggeredAlert): string {
   const lines: string[] = [];

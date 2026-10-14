@@ -144,4 +144,7 @@ body {
   .glow-green {
     box-shadow: 0 0 20px hsl(var(--bullish) / 0.15), 0 0 60px hsl(var(--bullish) / 0.05);
   }
+  .bg-neutral-signal\/70 {
+    background-color: hsl(var(--neutral) / 0.7);
+  }
 }

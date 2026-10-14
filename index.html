@@ -36,7 +36,42 @@
     </script>
   </head>
 
-  <body>
+  <body class="site-bg">
+    <style>
+      /* Boğa arka planı Tailwind katmanının dışında; görsel sayfa yenilense de kalır. */
+      body.site-bg {
+        background-color: #030308 !important;
+        background-image: url("/arka-plan-boga.png") !important;
+        background-size: cover !important;
+        background-position: center center !important;
+        background-attachment: fixed !important;
+        background-repeat: no-repeat !important;
+      }
+      body.site-bg::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(8, 10, 12, 0.42), rgba(14, 17, 21, 0.5) 42%, rgba(10, 12, 15, 0.68));
+      }
+      #root {
+        position: relative;
+        z-index: 1;
+        min-height: 100vh;
+      }
+      html.dark body.site-bg .bg-card {
+        background-color: hsl(220 18% 10% / 0.62);
+        backdrop-filter: blur(10px);
+      }
+      html.light body.site-bg {
+        background-image: none !important;
+        background-color: #f7f7f8 !important;
+      }
+      html.light body.site-bg::before {
+        display: none;
+      }
+    </style>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
