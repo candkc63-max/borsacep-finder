@@ -3,21 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>BORSA101 — BIST100 Teknik Analiz ve Hisse Tarama</title>
-    <meta name="description" content="BIST100 hisselerini teknik indikatörlerle tarayın. EMA, RSI, MACD, Bollinger ile AL/SAT sinyalleri. Ücretsiz borsa tarama aracı.">
+    <title>BORSA101</title>
+    <meta name="description" content="BORSA101">
     <meta name="author" content="BORSA101" />
-    <meta name="keywords" content="BIST100, borsa, teknik analiz, hisse tarama, EMA, RSI, MACD, Bollinger, AL SAT sinyali, borsa tarama">
+    <meta name="keywords" content="BORSA101">
 
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="BORSA101 — BIST100 Teknik Analiz ve Hisse Tarama">
-    <meta property="og:description" content="BIST100 hisselerini teknik indikatörlerle tarayın. EMA, RSI, MACD, Bollinger ile AL/SAT sinyalleri.">
+    <meta property="og:title" content="BORSA101">
+    <meta property="og:description" content="BORSA101">
     <meta property="og:url" content="https://borsa101.com">
     <meta property="og:site_name" content="BORSA101">
     <meta property="og:locale" content="tr_TR">
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="BORSA101 — BIST100 Teknik Analiz ve Hisse Tarama">
-    <meta name="twitter:description" content="BIST100 hisselerini teknik indikatörlerle tarayın. EMA, RSI, MACD, Bollinger ile AL/SAT sinyalleri.">
+    <meta name="twitter:title" content="BORSA101">
+    <meta name="twitter:description" content="BORSA101">
 
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="canonical" href="https://borsa101.com">
@@ -28,7 +28,7 @@
       "@type": "WebApplication",
       "name": "BORSA101",
       "url": "https://borsa101.com",
-      "description": "BIST100 hisselerini teknik indikatörlerle tarayın. AL/SAT sinyalleri.",
+      "description": "BORSA101",
       "applicationCategory": "FinanceApplication",
       "operatingSystem": "Web",
       "inLanguage": "tr"
@@ -36,7 +36,42 @@
     </script>
   </head>
 
-  <body>
+  <body class="site-bg">
+    <style>
+      /* Boğa arka planı Tailwind katmanının dışında; görsel sayfa yenilense de kalır. */
+      body.site-bg {
+        background-color: #030308 !important;
+        background-image: url("/arka-plan-boga.png") !important;
+        background-size: cover !important;
+        background-position: center center !important;
+        background-attachment: fixed !important;
+        background-repeat: no-repeat !important;
+      }
+      body.site-bg::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(8, 10, 12, 0.42), rgba(14, 17, 21, 0.5) 42%, rgba(10, 12, 15, 0.68));
+      }
+      #root {
+        position: relative;
+        z-index: 1;
+        min-height: 100vh;
+      }
+      html.dark body.site-bg .bg-card {
+        background-color: hsl(220 18% 10% / 0.62);
+        backdrop-filter: blur(10px);
+      }
+      html.light body.site-bg {
+        background-image: none !important;
+        background-color: #f7f7f8 !important;
+      }
+      html.light body.site-bg::before {
+        display: none;
+      }
+    </style>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
