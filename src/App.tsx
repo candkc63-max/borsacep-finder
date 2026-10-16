@@ -161,10 +161,10 @@ export default function App() {
                     <td className="p-3 text-right font-mono">{formatCap(stock.marketCap)}</td>
                     <td className="p-3 text-right font-mono">{stock.pe == null ? "—" : stock.pe.toFixed(1)}</td>
                     <td className="p-3 text-right font-mono">{stock.pb == null ? "—" : stock.pb.toFixed(2)}</td>
-                    <td className="p-3 text-right font-mono">{stock.roe == null ? "—" : `${stock.roe}%`}</td>
-                    <td className="p-3 text-right font-mono">{stock.dividendYield == null ? "—" : `${stock.dividendYield}%`}</td>
+                    <td className="p-3 text-right font-mono">{stock.roe == null ? "—" : `${stock.roe.toFixed(1)}%`}</td>
+                    <td className="p-3 text-right font-mono">{stock.dividendYield == null ? "—" : `${stock.dividendYield.toFixed(2)}%`}</td>
                     <td className={`p-3 text-right font-mono ${stock.change1y != null && stock.change1y < 0 ? "text-bearish" : "text-bullish"}`}>
-                      {stock.change1y == null ? "—" : `${stock.change1y > 0 ? "+" : ""}${stock.change1y}%`}
+                      {stock.change1y == null ? "—" : `${stock.change1y > 0 ? "+" : ""}${stock.change1y.toFixed(1)}%`}
                     </td>
                   </tr>
                 ))}
