@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   EMPTY_FILTER,
   SECTORS,
   STOCKS,
   filterStocks,
+  type Stock,
   formatCap,
   sortStocks,
   type SortKey,
@@ -32,10 +33,31 @@ export default function App() {
   const [filter, setFilter] = useState<StockFilter>(EMPTY_FILTER);
   const [sortKey, setSortKey] = useState<SortKey>("marketCap");
   const [sortDesc, setSortDesc] = useState(true);
+  const [stocks, setStocks] = useState<Stock[]>(STOCKS);
+  const [source, setSource] = useState<"loading" | "yahoo" | "sample">("loading");
+  const [asOf, setAsOf] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/bist-quotes")
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((body: { stocks?: Stock[]; asOf?: string }) => {
+        if (cancel || !body.stocks?.length) return;
+        setStocks(body.stocks);
+        setSource("yahoo");
+        setAsOf(body.asOf ?? null);
+      })
+      .catch(() => {
+        if (!cancel) setSource("sample");
+      });
+    return () => {
+      cancel = true;
+    };
+  }, []);
 
   const rows = useMemo(() => {
-    return sortStocks(filterStocks(STOCKS, filter), sortKey, sortDesc);
-  }, [filter, sortKey, sortDesc]);
+    return sortStocks(filterStocks(stocks, filter), sortKey, sortDesc);
+  }, [stocks, filter, sortKey, sortDesc]);
 
   const setField = (key: keyof StockFilter, value: string) => {
     setFilter((prev) => ({ ...prev, [key]: value }));
@@ -56,7 +78,12 @@ export default function App() {
           <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">BORSA101</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">Hisse filtreleme</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {rows.length} / {STOCKS.length} hisse. Liste örnek veridir, canlı fiyat değildir.
+            {rows.length} / {stocks.length} hisse.{" "}
+            {source === "yahoo"
+              ? `Yahoo Finance${asOf ? ` · ${new Date(asOf).toLocaleString("tr-TR")}` : ""}`
+              : source === "loading"
+                ? "Canlı veri yükleniyor"
+                : "Canlı veri alınamadı, örnek liste duruyor"}
           </p>
         </header>
 
@@ -134,10 +161,10 @@ export default function App() {
                     <td className="p-3 text-right font-mono">{formatCap(stock.marketCap)}</td>
                     <td className="p-3 text-right font-mono">{stock.pe == null ? "—" : stock.pe.toFixed(1)}</td>
                     <td className="p-3 text-right font-mono">{stock.pb == null ? "—" : stock.pb.toFixed(2)}</td>
-                    <td className="p-3 text-right font-mono">{stock.roe == null ? "—" : `${stock.roe}%`}</td>
-                    <td className="p-3 text-right font-mono">{stock.dividendYield == null ? "—" : `${stock.dividendYield}%`}</td>
+                    <td className="p-3 text-right font-mono">{stock.roe == null ? "—" : `${stock.roe.toFixed(1)}%`}</td>
+                    <td className="p-3 text-right font-mono">{stock.dividendYield == null ? "—" : `${stock.dividendYield.toFixed(2)}%`}</td>
                     <td className={`p-3 text-right font-mono ${stock.change1y != null && stock.change1y < 0 ? "text-bearish" : "text-bullish"}`}>
-                      {stock.change1y == null ? "—" : `${stock.change1y > 0 ? "+" : ""}${stock.change1y}%`}
+                      {stock.change1y == null ? "—" : `${stock.change1y > 0 ? "+" : ""}${stock.change1y.toFixed(1)}%`}
                     </td>
                   </tr>
                 ))}

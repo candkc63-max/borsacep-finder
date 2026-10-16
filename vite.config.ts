@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import { loadLiveQuotes } from "./src/server/liveQuotes";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -19,7 +20,27 @@ export default defineConfig(({ mode }) => {
     define: {
       "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
     },
-    plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+    plugins: [
+      react(),
+      mode === "development" && componentTagger(),
+      {
+        name: "bist-quotes",
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            if (req.url?.split("?")[0] !== "/api/bist-quotes") return next();
+            try {
+              const stocks = await loadLiveQuotes();
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ source: "yahoo", asOf: new Date().toISOString(), stocks }));
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ error: "Canlı veri alınamadı" }));
+            }
+          });
+        },
+      },
+    ].filter(Boolean),
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
