@@ -17,5 +17,13 @@
       "destination": "https://borsa101.com/:path*",
       "permanent": true
     }
-  ]
+  ],
+  "rewrites": [
+    { "source": "/api/ornek-yaml", "destination": "/api/ornek_yaml" }
+  ],
+  "functions": {
+    "api/**/*.py": {
+      "maxDuration": 60
+    }
+  }
 }
