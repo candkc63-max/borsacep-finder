@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { CandlestickChart } from "@/grafik/CandlestickChart";
 import {
   EMPTY_FILTER,
   SECTORS,
@@ -30,12 +31,21 @@ const columns: { key: SortKey; label: string; align: "left" | "right" }[] = [
 ];
 
 export default function App() {
+  const [view, setView] = useState<"filter" | "grafik">(
+    () => (window.location.hash === "#grafik" ? "grafik" : "filter"),
+  );
   const [filter, setFilter] = useState<StockFilter>(EMPTY_FILTER);
   const [sortKey, setSortKey] = useState<SortKey>("marketCap");
   const [sortDesc, setSortDesc] = useState(true);
   const [stocks, setStocks] = useState<Stock[]>(STOCKS);
   const [source, setSource] = useState<"loading" | "yahoo" | "sample">("loading");
   const [asOf, setAsOf] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onHash = () => setView(window.location.hash === "#grafik" ? "grafik" : "filter");
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   useEffect(() => {
     let cancel = false;
@@ -71,10 +81,25 @@ export default function App() {
     }
   };
 
+  if (view === "grafik") {
+    return (
+      <div className="flex h-screen flex-col bg-black text-white">
+        <div className="flex items-center justify-between px-4 py-2 text-xs text-neutral-400">
+          <span>Dummy OHLCV · Apache ECharts</span>
+          <a href="#filtre" className="text-neutral-300">Hisse filtreleme</a>
+        </div>
+        <div className="min-h-0 flex-1">
+          <CandlestickChart />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen px-4 py-6 text-foreground md:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-5">
+        <header className="mb-5 flex items-start justify-between gap-4">
+          <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">BORSA101</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">Hisse filtreleme</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -85,6 +110,8 @@ export default function App() {
                 ? "Canlı veri yükleniyor"
                 : "Canlı veri alınamadı, örnek liste duruyor"}
           </p>
+          </div>
+          <a href="#grafik" className="pt-1 text-sm text-muted-foreground">Grafik</a>
         </header>
 
         <section className="mb-4 rounded-2xl border border-border bg-card p-4">
