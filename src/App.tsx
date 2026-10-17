@@ -85,7 +85,7 @@ export default function App() {
     return (
       <div className="flex h-screen flex-col bg-black text-white">
         <div className="flex items-center justify-between px-4 py-2 text-xs text-neutral-400">
-          <span>Dummy OHLCV · Apache ECharts</span>
+          <span>CAPITALCOM:NAS100 · 60 dk · 8 Tem–16 Eki 2026</span>
           <a href="#filtre" className="text-neutral-300">Hisse filtreleme</a>
         </div>
         <div className="min-h-0 flex-1">
