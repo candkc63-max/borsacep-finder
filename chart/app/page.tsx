@@ -10,7 +10,7 @@ const CandlestickChart = dynamic(
 export default function Page() {
   return (
     <main>
-      <p className="tag">Dummy OHLCV · Apache ECharts</p>
+      <p className="tag">CAPITALCOM:NAS100 · 60 dk · 8 Tem–16 Eki 2026</p>
       <div className="stage">
         <CandlestickChart />
       </div>
