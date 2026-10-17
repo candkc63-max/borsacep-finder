@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { loadLiveQuotes } from "./src/server/liveQuotes";
+import { loadYahooBars } from "./src/server/yahooBars";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -27,7 +28,26 @@ export default defineConfig(({ mode }) => {
         name: "bist-quotes",
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            if (req.url?.split("?")[0] !== "/api/bist-quotes") return next();
+            const route = req.url?.split("?")[0];
+            if (route === "/api/bars") {
+              const url = new URL(req.url ?? "", "http://localhost");
+              try {
+                const data = await loadYahooBars(
+                  url.searchParams.get("symbol") ?? "",
+                  url.searchParams.get("interval") ?? "1d",
+                  url.searchParams.get("range") ?? "2y",
+                  url.searchParams.get("bist") !== "0",
+                );
+                res.setHeader("content-type", "application/json");
+                res.end(JSON.stringify({ source: "yahoo", ...data }));
+              } catch (error) {
+                res.statusCode = 400;
+                res.setHeader("content-type", "application/json");
+                res.end(JSON.stringify({ error: error instanceof Error ? error.message : "Mum alınamadı" }));
+              }
+              return;
+            }
+            if (route !== "/api/bist-quotes") return next();
             try {
               const stocks = await loadLiveQuotes();
               res.setHeader("content-type", "application/json");
