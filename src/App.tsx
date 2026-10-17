@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Backtester } from "@/backtest/Backtester";
 import {
   EMPTY_FILTER,
   SECTORS,
@@ -30,12 +31,21 @@ const columns: { key: SortKey; label: string; align: "left" | "right" }[] = [
 ];
 
 export default function App() {
+  const [view, setView] = useState<"filter" | "backtest">(
+    () => (window.location.hash === "#backtest" ? "backtest" : "filter"),
+  );
   const [filter, setFilter] = useState<StockFilter>(EMPTY_FILTER);
   const [sortKey, setSortKey] = useState<SortKey>("marketCap");
   const [sortDesc, setSortDesc] = useState(true);
   const [stocks, setStocks] = useState<Stock[]>(STOCKS);
   const [source, setSource] = useState<"loading" | "yahoo" | "sample">("loading");
   const [asOf, setAsOf] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onHash = () => setView(window.location.hash === "#backtest" ? "backtest" : "filter");
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   useEffect(() => {
     let cancel = false;
@@ -72,10 +82,23 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 text-foreground md:px-8">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen text-foreground">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 pt-6 md:px-8">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">BORSA101</p>
+        <nav className="flex gap-4 text-sm">
+          <a href="#filtre" className={view === "filter" ? "text-foreground" : "text-muted-foreground"}>
+            Hisse filtreleme
+          </a>
+          <a href="#backtest" className={view === "backtest" ? "text-foreground" : "text-muted-foreground"}>
+            Backtest
+          </a>
+        </nav>
+      </div>
+      {view === "backtest" ? (
+        <Backtester />
+      ) : (
+      <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
         <header className="mb-5">
-          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">BORSA101</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">Hisse filtreleme</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {rows.length} / {stocks.length} hisse.{" "}
@@ -176,6 +199,7 @@ export default function App() {
           )}
         </section>
       </div>
+      )}
     </div>
   );
 }

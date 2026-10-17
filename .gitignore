@@ -34,3 +34,6 @@ ios/DerivedData
 *.sln
 *.sw?
 .vercel
+__pycache__/
+*.pyc
+.venv
