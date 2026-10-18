@@ -1,4 +1,5 @@
 import type { EChartsCoreOption } from "echarts";
+import { DEFAULT_PREFS, fibPrices, type ChartPrefs, type Drawing } from "./chartPrefs";
 import { ema, rsi } from "./indicators";
 import type { TradeMark } from "./manualBacktest";
 import type { OhlcBar } from "./parseOhlcv";
@@ -14,6 +15,51 @@ export function windowPercent(total: number, bars: number): { start: number; end
   if (total <= 1 || bars >= total) return { start: 0, end: 100 };
   const count = Math.max(20, bars);
   return { start: ((total - count) / total) * 100, end: 100 };
+}
+
+function drawingMarks(drawings: Drawing[]) {
+  const data: unknown[] = [];
+  for (const item of drawings) {
+    if (item.kind === "hline") {
+      data.push({
+        yAxis: item.price,
+        lineStyle: { color: "#bdbdbd", type: "solid" as const, width: 1 },
+        label: { show: true, formatter: price(item.price), color: "#bdbdbd", position: "insideEndTop" as const },
+      });
+      continue;
+    }
+    if (item.kind === "fib") {
+      const from = Math.min(item.a.index, item.b.index);
+      const to = Math.max(item.a.index, item.b.index);
+      for (const level of fibPrices(item.a.price, item.b.price)) {
+        data.push([
+          {
+            coord: [from, level.price],
+            lineStyle: { color: "#c9a227", width: 1, type: "dashed" as const },
+            label: { show: true, formatter: `${Math.round(level.ratio * 1000) / 10}%`, color: "#c9a227", position: "insideStartTop" as const },
+          },
+          { coord: [to, level.price] },
+        ]);
+      }
+      continue;
+    }
+    const bars = Math.abs(item.b.index - item.a.index);
+    const delta = item.b.price - item.a.price;
+    data.push([
+      {
+        coord: [item.a.index, item.a.price],
+        lineStyle: { color: "#f2f2f2", type: "solid" as const, width: 1 },
+        label: {
+          show: item.kind === "measure",
+          formatter: `${bars} mum  ${delta > 0 ? "+" : ""}${price(delta)}`,
+          color: "#f2f2f2",
+          position: "middle" as const,
+        },
+      },
+      { coord: [item.b.index, item.b.price] },
+    ]);
+  }
+  return data;
 }
 
 function line(name: string, data: Array<number | null>, color: string, pane = 0) {
@@ -34,16 +80,20 @@ export function candleOption(
   rows: OhlcBar[],
   visibleBars = 120,
   replay: { axisMin: number; axisMax: number; trades?: TradeMark[] } | null = null,
+  prefs: ChartPrefs = DEFAULT_PREFS,
 ): EChartsCoreOption {
   const hasVolume = !replay && rows.some((row) => row.volume != null && row.volume > 0);
-  const lower = replay ? "rsi" : hasVolume ? "volume" : "none";
+  const lower = prefs.rsi ? "rsi" : hasVolume ? "volume" : "none";
   const view = windowPercent(rows.length, visibleBars);
   const last = rows[rows.length - 1];
   const labels = rows.map((row) => row.label);
   const candles = rows.map((row) => [row.open, row.close, row.low, row.high]);
   const closes = rows.map((row) => row.close);
-  const ema5 = replay ? ema(closes, 5) : [];
-  const rsi14 = replay ? rsi(closes, 14) : [];
+  const ema5 = prefs.ema5 ? ema(closes, 5) : [];
+  const ema8 = prefs.ema8 ? ema(closes, 8) : [];
+  const ema13 = prefs.ema13 ? ema(closes, 13) : [];
+  const rsi14 = prefs.rsi ? rsi(closes, 14) : [];
+  const legend = ["EMA 5", "EMA 8", "EMA 13"].filter((_, index) => [prefs.ema5, prefs.ema8, prefs.ema13][index]);
   const volumes = rows.map((row) => ({
     value: row.volume ?? 0,
     itemStyle: { color: row.close >= row.open ? "rgba(255,255,255,0.8)" : "rgba(225,6,0,0.9)" },
@@ -64,8 +114,8 @@ export function candleOption(
   return {
     backgroundColor: "#000000",
     animation: false,
-    legend: replay
-      ? { show: true, data: ["EMA 5", "EMA 8", "EMA 13"], top: 0, left: 12, textStyle: { color: "#9a9a9a" }, itemHeight: 8 }
+    legend: legend.length
+      ? { show: true, data: legend, top: 0, left: 12, textStyle: { color: "#9a9a9a" }, itemHeight: 8 }
       : { show: false },
     axisPointer: {
       link: [{ xAxisIndex: "all" }],
@@ -83,7 +133,7 @@ export function candleOption(
       textStyle: { color: "#f2f2f2", fontSize: 12 },
       formatter: (params: unknown) => {
         const list = (Array.isArray(params) ? params : [params]) as Array<{ seriesType?: string; seriesName?: string; dataIndex?: number; data?: unknown }>;
-        const candle = list.find((item) => item.seriesType === "candlestick");
+        const candle = list.find((item) => item.seriesName === "Fiyat");
         const row = candle?.dataIndex == null ? undefined : rows[candle.dataIndex];
         if (!row) return "";
         const lines = [
@@ -94,10 +144,13 @@ export function candleOption(
           `Kapanış ${price(row.close)}`,
         ];
         if (row.volume != null) lines.push(`Hacim ${Math.round(row.volume).toLocaleString("tr-TR")}`);
-        if (replay && candle?.dataIndex != null) {
-          const emaValue = ema5[candle.dataIndex];
-          const rsiValue = rsi14[candle.dataIndex];
+        if (candle?.dataIndex != null) {
+          const index = candle.dataIndex;
+          const emaValue = ema5[index];
+          const rsiValue = rsi14[index];
           if (emaValue != null) lines.push(`EMA 5 ${price(emaValue)}`);
+          if (ema8[index] != null) lines.push(`EMA 8 ${price(ema8[index])}`);
+          if (ema13[index] != null) lines.push(`EMA 13 ${price(ema13[index])}`);
           if (rsiValue != null) lines.push(`RSI ${rsiValue.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`);
         }
         return lines.join("<br/>");
@@ -106,7 +159,7 @@ export function candleOption(
     grid: lower === "none"
       ? [{ left: 16, right: 96, top: 16, bottom: 52 }]
       : [
-          { left: 16, right: 96, top: replay ? 28 : 16, height: "62%" },
+          { left: 16, right: 96, top: legend.length ? 28 : 16, height: "62%" },
           { left: 16, right: 96, top: "76%", height: "12%" },
         ],
     xAxis: lower === "none" ? [categoryAxis(0, true)] : [categoryAxis(0, true), categoryAxis(1, false)],
@@ -119,7 +172,7 @@ export function candleOption(
           color: "#d6d6d6",
           formatter: (value: number) => price(value),
         },
-        splitLine: { lineStyle: { color: "#1c1c1c" } },
+        splitLine: { show: prefs.grid, lineStyle: { color: "#1c1c1c" } },
         min: (value: { min: number; max: number }) => value.min - (value.max - value.min) * 0.08,
         max: (value: { min: number; max: number }) => value.max + (value.max - value.min) * 0.08,
       },
@@ -182,8 +235,10 @@ export function candleOption(
     series: [
       {
         name: "Fiyat",
-        type: "candlestick",
-        data: candles,
+        type: prefs.chartType === "cizgi" ? "line" as const : "candlestick" as const,
+        data: prefs.chartType === "cizgi" ? closes : candles,
+        showSymbol: false,
+        lineStyle: { width: 1.4, color: "#f2f2f2" },
         itemStyle: {
           color: UP,
           color0: DOWN,
@@ -234,7 +289,8 @@ export function candleOption(
                 borderRadius: 2,
               },
               data: [
-                { yAxis: last.close },
+                ...(prefs.lastPrice ? [{ yAxis: last.close }] : []),
+                ...drawingMarks(prefs.drawings),
                 ...(replay?.trades ?? []).flatMap((trade) => [
                   ...(trade.stop == null
                     ? []
@@ -255,14 +311,10 @@ export function candleOption(
             }
           : undefined,
       },
-      ...(replay
-        ? [
-            line("EMA 5", ema5, "#d0d0d0"),
-            line("EMA 8", ema(closes, 8), "#c9a227"),
-            line("EMA 13", ema(closes, 13), "#7aa2ff"),
-            line("RSI", rsi14, "#c9a227", 1),
-          ]
-        : []),
+      ...(prefs.ema5 ? [line("EMA 5", ema5, "#d0d0d0")] : []),
+      ...(prefs.ema8 ? [line("EMA 8", ema8, "#c9a227")] : []),
+      ...(prefs.ema13 ? [line("EMA 13", ema13, "#7aa2ff")] : []),
+      ...(prefs.rsi ? [line("RSI", rsi14, "#c9a227", 1)] : []),
       ...(lower === "volume"
         ? [{
             name: "Hacim",

@@ -83,14 +83,8 @@ export default function App() {
 
   if (view === "grafik") {
     return (
-      <div className="flex h-screen flex-col bg-black text-white">
-        <div className="flex items-center justify-between px-4 py-2 text-xs text-neutral-400">
-          <span>Grafik</span>
-          <a href="#filtre" className="text-neutral-300">Hisse filtreleme</a>
-        </div>
-        <div className="min-h-0 flex-1">
-          <CandlestickChart />
-        </div>
+      <div className="h-screen bg-black text-white">
+        <CandlestickChart />
       </div>
     );
   }
