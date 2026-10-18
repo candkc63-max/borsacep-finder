@@ -7,8 +7,10 @@ import { choiceById, NAS100_CHOICE, searchCharts, type ChartChoice } from "../li
 import { intervalsFor, type ChartPoint, type ChartPrefs, type Drawing } from "../lib/chartPrefs";
 import { replayDelay, replayFocus, replaySlice, stepCursor } from "../lib/indicators";
 import { simulateManual, validateManualOrder, type ManualOrder, type Side } from "../lib/manualBacktest";
+import { backtestStrategy, strategyMarks, type StrategyReport, type StrategyTrade } from "../lib/strategyBacktest";
 import { parseOhlcvCsv, type OhlcBar } from "../lib/parseOhlcv";
 import { BottomDock, type DockTab } from "./terminal/BottomDock";
+import { StrategyBuilder, type BuilderFields } from "./terminal/StrategyBuilder";
 import { TopBar } from "./terminal/TopBar";
 import { ToolRail, type DrawTool } from "./terminal/ToolRail";
 import "./terminal/terminal.css";
@@ -90,6 +92,20 @@ export function CandlestickChart() {
   const [lastPrice, setLastPrice] = useState(true);
   const [narrow, setNarrow] = useState(false);
   const [arm, setArm] = useState(false);
+  const [builder, setBuilder] = useState<BuilderFields>({
+    fast: "5",
+    slow: "13",
+    mode: "long",
+    stopKind: "fixed",
+    fixedPercent: "2",
+    atrPeriod: "14",
+    atrMultiple: "2",
+    capital: "10000",
+    size: "1",
+    fee: "0.05",
+    slippage: "0.01",
+  });
+  const [strategy, setStrategy] = useState<StrategyReport | null>(null);
   const orderId = useRef(1);
   const toolRef = useRef<DrawTool>("cursor");
   const armRef = useRef(false);
@@ -104,6 +120,7 @@ export function CandlestickChart() {
     let cancel = false;
     setReplay(null);
     setOrders([]);
+    setStrategy(null);
     setRows(null);
     setActive(null);
     setFormError("");
@@ -293,7 +310,7 @@ export function CandlestickChart() {
     const frozen = !replay.following ? userWindowRef.current : null;
     const axisMin = frozen ? Math.min(frozen.start, focus.startValue, 0) : focus.axisMin;
     const axisMax = frozen ? Math.max(frozen.end, replay.cursor) : focus.axisMax;
-    const option = candleOption(prefix, 120, { axisMin, axisMax, trades: book?.marks ?? [] }, prefs);
+    const option = candleOption(prefix, 120, { axisMin, axisMax, trades: book?.marks ?? [] }, prefs, strategyMarks(strategy?.trades ?? [], replay.cursor));
     delete option.dataZoom;
     const window = frozen ?? { start: focus.startValue, end: focus.endValue };
     applyingZoom.current = true;
@@ -303,15 +320,15 @@ export function CandlestickChart() {
     chart.dispatchAction({ type: "dataZoom", startValue: window.start, endValue: window.end });
     applyingZoom.current = false;
     setActive(prefix[prefix.length - 1] ?? null);
-  }, [replay, rows, book, prefs]);
+  }, [replay, rows, book, prefs, strategy]);
 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !rows?.length || replay) return;
-    const option = candleOption(rows, range, null, prefs);
+    const option = candleOption(rows, range, null, prefs, strategyMarks(strategy?.trades ?? [], null));
     delete option.dataZoom;
     chart.setOption(option, { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend"] });
-  }, [prefs, rows, range, replay]);
+  }, [prefs, rows, range, replay, strategy]);
 
   useEffect(() => {
     if (!replay?.playing || !rows?.length) return undefined;
@@ -386,6 +403,38 @@ export function CandlestickChart() {
     if (!replay || !rows?.[replay.cursor]) return;
     const price = rows[replay.cursor].close;
     setOrders((list) => list.map((item) => (item.id === id && item.manualExit == null ? { ...item, manualExit: { cursor: replay.cursor, price } } : item)));
+  }
+
+  function runStrategy() {
+    if (!rows?.length) return;
+    const fast = Number(builder.fast);
+    const slow = Number(builder.slow);
+    const percent = Number(builder.fixedPercent) / 100;
+    const report = backtestStrategy(rows, {
+      fast,
+      slow,
+      mode: builder.mode,
+      stop: builder.stopKind === "fixed"
+        ? { kind: "fixed", percent }
+        : { kind: "atr", period: Number(builder.atrPeriod), multiple: Number(builder.atrMultiple) },
+      size: Number(builder.size),
+      capital: Number(builder.capital),
+      feeRate: Number(builder.fee) / 100,
+      slippageRate: Number(builder.slippage) / 100,
+    });
+    setStrategy(report);
+    setPanelOpen(true);
+    setTab("otomatik");
+  }
+
+  function showStrategyTrade(trade: StrategyTrade) {
+    viewSpanRef.current = 100;
+    setPanelOpen(true);
+    setTab("replay");
+    const next = { cursor: trade.entryIndex, start: trade.entryIndex, playing: false, speed: 1, following: true };
+    replayRef.current = next;
+    setReplay(next);
+    if (rows?.[trade.entryIndex]) setActive(rows[trade.entryIndex]);
   }
 
   function showTrade(entryCursor: number) {
@@ -467,7 +516,7 @@ export function CandlestickChart() {
     ? `${choice.title}  ${active.label}  A ${price(active.open)}  Y ${price(active.high)}  D ${price(active.low)}  K ${price(active.close)}`
     : `${choice.title} yükleniyor`;
 
-  const strategy = (
+  const manualPane = (
     <div>
       <p className="term-note">{replay ? "Long için AL, short için SAT. Stop ve hedef grafik çizgisi olur." : "İşlem açmak için önce Bar Replay başlat. Grafikte bir muma tıkla."}</p>
       <div className="term-row">
@@ -564,7 +613,18 @@ export function CandlestickChart() {
     </div>
   );
 
-  const panes = { strateji: strategy, gecmis: history, performans: performance, replay: replayPane };
+  const automatic = (
+    <StrategyBuilder
+      fields={builder}
+      onChange={(patch) => setBuilder((current) => ({ ...current, ...patch }))}
+      onRun={runStrategy}
+      report={strategy}
+      rows={rows}
+      onPick={showStrategyTrade}
+    />
+  );
+
+  const panes = { strateji: manualPane, otomatik: automatic, gecmis: history, performans: performance, replay: replayPane };
 
   return (
     <div ref={shellRef} className={narrow ? "term narrow" : "term"} data-testid="terminal">

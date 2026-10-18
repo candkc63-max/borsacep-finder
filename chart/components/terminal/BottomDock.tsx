@@ -1,9 +1,10 @@
 import type { PointerEvent, ReactNode } from "react";
 
-export type DockTab = "strateji" | "gecmis" | "performans" | "replay";
+export type DockTab = "strateji" | "otomatik" | "gecmis" | "performans" | "replay";
 
 const TABS: Array<{ id: DockTab; label: string }> = [
   { id: "strateji", label: "Strateji Sınayıcı" },
+  { id: "otomatik", label: "Otomatik" },
   { id: "gecmis", label: "İşlem Geçmişi" },
   { id: "performans", label: "Performans" },
   { id: "replay", label: "Bar Replay" },

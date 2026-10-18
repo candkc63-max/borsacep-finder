@@ -93,6 +93,19 @@ export function validateManualOrder(order: Pick<ManualOrder, "direction" | "entr
   return null;
 }
 
+export function barExit(direction: Side, stop: number, target: number, bar: PriceBar): { price: number; reason: ExitReason } | null {
+  return levelHit({
+    id: "",
+    entryCursor: 0,
+    direction,
+    entry: 0,
+    size: 0,
+    stop,
+    target,
+    manualExit: null,
+  }, bar);
+}
+
 function levelHit(order: ManualOrder, bar: PriceBar): { price: number; reason: ExitReason } | null {
   if (order.direction === "long") {
     if (bar.open <= order.stop) return { price: bar.open, reason: "gap-stop" };
