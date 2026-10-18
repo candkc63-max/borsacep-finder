@@ -8,8 +8,16 @@ function price(value: number) {
   return value.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-export function candleOption(rows: OhlcBar[]): EChartsCoreOption {
+export function windowPercent(total: number, bars: number): { start: number; end: number } {
+  if (total <= 1 || bars >= total) return { start: 0, end: 100 };
+  const count = Math.max(20, bars);
+  return { start: ((total - count) / total) * 100, end: 100 };
+}
+
+export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOption {
   const hasVolume = rows.some((row) => row.volume != null && row.volume > 0);
+  const view = windowPercent(rows.length, visibleBars);
+  const last = rows[rows.length - 1];
   const labels = rows.map((row) => row.label);
   const candles = rows.map((row) => [row.open, row.close, row.low, row.high]);
   const volumes = rows.map((row) => ({
@@ -52,10 +60,10 @@ export function candleOption(rows: OhlcBar[]): EChartsCoreOption {
     },
     grid: hasVolume
       ? [
-          { left: 16, right: 84, top: 24, height: "62%" },
-          { left: 16, right: 84, top: "76%", height: "14%" },
+          { left: 16, right: 96, top: 24, height: "62%" },
+          { left: 16, right: 96, top: "76%", height: "14%" },
         ]
-      : [{ left: 16, right: 84, top: 24, bottom: 48 }],
+      : [{ left: 16, right: 96, top: 16, bottom: 52 }],
     xAxis: [
       {
         type: "category",
@@ -93,6 +101,8 @@ export function candleOption(rows: OhlcBar[]): EChartsCoreOption {
           formatter: (value: number) => price(value),
         },
         splitLine: { lineStyle: { color: "#1c1c1c" } },
+        min: (value: { min: number; max: number }) => value.min - (value.max - value.min) * 0.08,
+        max: (value: { min: number; max: number }) => value.max + (value.max - value.min) * 0.08,
       },
       ...(hasVolume
         ? [{
@@ -107,14 +117,26 @@ export function candleOption(rows: OhlcBar[]): EChartsCoreOption {
         : []),
     ],
     dataZoom: [
-      { type: "inside", xAxisIndex: hasVolume ? [0, 1] : [0], start: 78, end: 100 },
+      {
+        type: "inside",
+        xAxisIndex: hasVolume ? [0, 1] : [0],
+        start: view.start,
+        end: view.end,
+        filterMode: "filter",
+        zoomOnMouseWheel: true,
+        moveOnMouseMove: true,
+        moveOnMouseWheel: false,
+        preventDefaultMouseMove: true,
+        throttle: 30,
+      },
       {
         type: "slider",
         xAxisIndex: hasVolume ? [0, 1] : [0],
         bottom: 8,
-        height: 18,
-        start: 78,
-        end: 100,
+        height: 22,
+        start: view.start,
+        end: view.end,
+        filterMode: "filter",
         borderColor: "#222222",
         backgroundColor: "#050505",
         fillerColor: "rgba(255,255,255,0.08)",
@@ -137,6 +159,25 @@ export function candleOption(rows: OhlcBar[]): EChartsCoreOption {
           borderColor: UP,
           borderColor0: DOWN,
         },
+        barMaxWidth: 12,
+        markLine: last
+          ? {
+              symbol: "none",
+              silent: true,
+              animation: false,
+              lineStyle: { color: last.close >= last.open ? "#ffffff" : DOWN, type: "dashed", width: 1 },
+              label: {
+                show: true,
+                position: "end",
+                formatter: price(last.close),
+                color: last.close >= last.open ? "#111111" : "#ffffff",
+                backgroundColor: last.close >= last.open ? "#ffffff" : DOWN,
+                padding: [3, 5],
+                borderRadius: 2,
+              },
+              data: [{ yAxis: last.close }],
+            }
+          : undefined,
       },
       ...(hasVolume
         ? [{
