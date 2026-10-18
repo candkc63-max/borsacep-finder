@@ -1,4 +1,4 @@
-import { loadChartBars } from "../src/server/chartBars";
+import { loadChartBars } from "../src/server/chartBars.js";
 
 export default async function handler(
   req: { query?: { id?: string } },

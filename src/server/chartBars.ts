@@ -1,5 +1,5 @@
-import { choiceById } from "../../chart/lib/chartSearch";
-import { barsFromYahoo, groupFourHours } from "../../chart/lib/yahooBars";
+import { choiceById } from "../../chart/lib/chartSearch.js";
+import { barsFromYahoo, groupFourHours } from "../../chart/lib/yahooBars.js";
 import type { OhlcBar } from "../../chart/lib/parseOhlcv";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
@@ -29,8 +29,15 @@ export async function loadChartBars(id: string): Promise<OhlcBar[]> {
   url.searchParams.set("interval", spec.interval);
   url.searchParams.set("range", spec.range);
   const response = await fetch(url, { headers: { "user-agent": UA, accept: "application/json" } });
-  if (!response.ok) throw new Error("Yahoo yanıt vermedi");
-  const bars = barsFromYahoo(await response.json());
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Yahoo ${response.status} döndü`);
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error("Yahoo JSON döndürmedi");
+  }
+  const bars = barsFromYahoo(body);
   if (!bars.length) throw new Error("Yahoo mum vermedi");
   return spec.aggregate === "4h" ? groupFourHours(bars) : bars;
 }

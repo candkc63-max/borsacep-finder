@@ -1,4 +1,4 @@
-import { loadLiveQuotes } from "../src/server/liveQuotes";
+import { loadLiveQuotes } from "../src/server/liveQuotes.js";
 
 export default async function handler(_req: unknown, res: { status: (code: number) => { json: (body: unknown) => void } }) {
   try {

@@ -1,4 +1,4 @@
-import { STOCKS } from "../../src/data/stocks";
+import { STOCKS } from "../../src/data/stocks.js";
 
 export type ChartChoice = {
   id: string;
