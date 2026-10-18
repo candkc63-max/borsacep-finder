@@ -81,7 +81,9 @@ export function candleOption(
   visibleBars = 120,
   replay: { axisMin: number; axisMax: number; trades?: TradeMark[] } | null = null,
   prefs: ChartPrefs = DEFAULT_PREFS,
+  extraTrades: TradeMark[] = [],
 ): EChartsCoreOption {
+  const tradeMarks = [...(replay?.trades ?? []), ...extraTrades];
   const hasVolume = !replay && rows.some((row) => row.volume != null && row.volume > 0);
   const lower = prefs.rsi ? "rsi" : hasVolume ? "volume" : "none";
   const view = windowPercent(rows.length, visibleBars);
@@ -247,29 +249,21 @@ export function candleOption(
         },
         barWidth: replay ? "68%" : undefined,
         barMaxWidth: replay ? undefined : 12,
-        markPoint: replay?.trades?.length
+        markPoint: tradeMarks.length
           ? {
               silent: true,
               animation: false,
-              data: replay.trades.flatMap((trade) => {
-                const entry = {
-                  coord: [trade.entryIndex, trade.entryPrice],
-                  symbol: "circle",
-                  symbolSize: 12,
-                  itemStyle: { color: trade.entryBuy ? "#16c47a" : DOWN },
-                  label: { show: false },
-                };
+              data: tradeMarks.flatMap((trade) => {
+                const point = (buy: boolean, index: number, price: number) => ({
+                  coord: [index, price],
+                  symbol: "pin",
+                  symbolSize: 34,
+                  itemStyle: { color: buy ? "#16c47a" : DOWN },
+                  label: { show: true, formatter: buy ? "AL" : "SAT", color: "#111111", fontSize: 10 },
+                });
+                const entry = point(trade.entryBuy, trade.entryIndex, trade.entryPrice);
                 if (trade.exitIndex == null || trade.exitPrice == null) return [entry];
-                return [
-                  entry,
-                  {
-                    coord: [trade.exitIndex, trade.exitPrice],
-                    symbol: "circle",
-                    symbolSize: 12,
-                    itemStyle: { color: trade.exitBuy ? "#16c47a" : DOWN },
-                    label: { show: false },
-                  },
-                ];
+                return [entry, point(trade.exitBuy, trade.exitIndex, trade.exitPrice)];
               }),
             }
           : undefined,
@@ -291,7 +285,7 @@ export function candleOption(
               data: [
                 ...(prefs.lastPrice ? [{ yAxis: last.close }] : []),
                 ...drawingMarks(prefs.drawings),
-                ...(replay?.trades ?? []).flatMap((trade) => [
+                ...tradeMarks.flatMap((trade) => [
                   ...(trade.stop == null
                     ? []
                     : [{
