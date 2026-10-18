@@ -1,4 +1,5 @@
 import type { EChartsCoreOption } from "echarts";
+import { ema, rsi } from "./indicators";
 import type { OhlcBar } from "./parseOhlcv";
 
 const UP = "#ffffff";
@@ -14,20 +15,54 @@ export function windowPercent(total: number, bars: number): { start: number; end
   return { start: ((total - count) / total) * 100, end: 100 };
 }
 
-export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOption {
-  const hasVolume = rows.some((row) => row.volume != null && row.volume > 0);
+function line(name: string, data: Array<number | null>, color: string, pane = 0) {
+  return {
+    name,
+    type: "line" as const,
+    xAxisIndex: pane,
+    yAxisIndex: pane,
+    data,
+    showSymbol: false,
+    connectNulls: false,
+    lineStyle: { width: 1.2, color },
+    itemStyle: { color },
+  };
+}
+
+export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisMax: number } | null = null): EChartsCoreOption {
+  const hasVolume = !replay && rows.some((row) => row.volume != null && row.volume > 0);
+  const lower = replay ? "rsi" : hasVolume ? "volume" : "none";
   const view = windowPercent(rows.length, visibleBars);
   const last = rows[rows.length - 1];
   const labels = rows.map((row) => row.label);
   const candles = rows.map((row) => [row.open, row.close, row.low, row.high]);
+  const closes = rows.map((row) => row.close);
+  const ema5 = replay ? ema(closes, 5) : [];
+  const rsi14 = replay ? rsi(closes, 14) : [];
+  const axisMax = replay?.axisMax ?? "dataMax";
   const volumes = rows.map((row) => ({
     value: row.volume ?? 0,
     itemStyle: { color: row.close >= row.open ? "rgba(255,255,255,0.8)" : "rgba(225,6,0,0.9)" },
   }));
+  const categoryAxis = (pane: number, showLabel: boolean) => ({
+    type: "category" as const,
+    gridIndex: pane,
+    data: labels,
+    boundaryGap: true,
+    axisLine: { lineStyle: { color: "#333333" } },
+    axisLabel: showLabel ? { color: "#9a9a9a" } : { show: false },
+    axisTick: { show: false },
+    splitLine: { show: false },
+    min: "dataMin" as const,
+    max: axisMax,
+  });
 
   return {
     backgroundColor: "#000000",
     animation: false,
+    legend: replay
+      ? { show: true, data: ["EMA 5", "EMA 8", "EMA 13"], top: 0, left: 12, textStyle: { color: "#9a9a9a" }, itemHeight: 8 }
+      : { show: false },
     axisPointer: {
       link: [{ xAxisIndex: "all" }],
       label: { backgroundColor: "#222222" },
@@ -43,7 +78,7 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOpt
       borderColor: "#333333",
       textStyle: { color: "#f2f2f2", fontSize: 12 },
       formatter: (params: unknown) => {
-        const list = (Array.isArray(params) ? params : [params]) as Array<{ seriesType?: string; dataIndex?: number; data?: unknown }>;
+        const list = (Array.isArray(params) ? params : [params]) as Array<{ seriesType?: string; seriesName?: string; dataIndex?: number; data?: unknown }>;
         const candle = list.find((item) => item.seriesType === "candlestick");
         const row = candle?.dataIndex == null ? undefined : rows[candle.dataIndex];
         if (!row) return "";
@@ -55,42 +90,22 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOpt
           `Kapanış ${price(row.close)}`,
         ];
         if (row.volume != null) lines.push(`Hacim ${Math.round(row.volume).toLocaleString("tr-TR")}`);
+        if (replay && candle?.dataIndex != null) {
+          const emaValue = ema5[candle.dataIndex];
+          const rsiValue = rsi14[candle.dataIndex];
+          if (emaValue != null) lines.push(`EMA 5 ${price(emaValue)}`);
+          if (rsiValue != null) lines.push(`RSI ${rsiValue.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`);
+        }
         return lines.join("<br/>");
       },
     },
-    grid: hasVolume
-      ? [
-          { left: 16, right: 96, top: 24, height: "62%" },
-          { left: 16, right: 96, top: "76%", height: "14%" },
-        ]
-      : [{ left: 16, right: 96, top: 16, bottom: 52 }],
-    xAxis: [
-      {
-        type: "category",
-        data: labels,
-        boundaryGap: true,
-        axisLine: { lineStyle: { color: "#333333" } },
-        axisLabel: { color: "#9a9a9a" },
-        axisTick: { show: false },
-        splitLine: { show: false },
-        min: "dataMin",
-        max: "dataMax",
-      },
-      ...(hasVolume
-        ? [{
-            type: "category" as const,
-            gridIndex: 1,
-            data: labels,
-            boundaryGap: true,
-            axisLine: { lineStyle: { color: "#333333" } },
-            axisLabel: { show: false },
-            axisTick: { show: false },
-            splitLine: { show: false },
-            min: "dataMin",
-            max: "dataMax",
-          }]
-        : []),
-    ],
+    grid: lower === "none"
+      ? [{ left: 16, right: 96, top: 16, bottom: 52 }]
+      : [
+          { left: 16, right: 96, top: replay ? 28 : 16, height: "62%" },
+          { left: 16, right: 96, top: "76%", height: "12%" },
+        ],
+    xAxis: lower === "none" ? [categoryAxis(0, true)] : [categoryAxis(0, true), categoryAxis(1, false)],
     yAxis: [
       {
         scale: true,
@@ -104,7 +119,7 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOpt
         min: (value: { min: number; max: number }) => value.min - (value.max - value.min) * 0.08,
         max: (value: { min: number; max: number }) => value.max + (value.max - value.min) * 0.08,
       },
-      ...(hasVolume
+      ...(lower === "volume"
         ? [{
             scale: true,
             gridIndex: 1,
@@ -115,11 +130,23 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOpt
             splitLine: { show: false },
           }]
         : []),
+      ...(lower === "rsi"
+        ? [{
+            gridIndex: 1,
+            position: "right" as const,
+            min: 0,
+            max: 100,
+            interval: 50,
+            axisLabel: { color: "#9a9a9a", formatter: (value: number) => `${value}` },
+            axisLine: { lineStyle: { color: "#333333" } },
+            splitLine: { lineStyle: { color: "#1c1c1c" } },
+          }]
+        : []),
     ],
     dataZoom: [
       {
         type: "inside",
-        xAxisIndex: hasVolume ? [0, 1] : [0],
+        xAxisIndex: lower === "none" ? [0] : [0, 1],
         start: view.start,
         end: view.end,
         filterMode: "filter",
@@ -131,7 +158,7 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOpt
       },
       {
         type: "slider",
-        xAxisIndex: hasVolume ? [0, 1] : [0],
+        xAxisIndex: lower === "none" ? [0] : [0, 1],
         bottom: 8,
         height: 22,
         start: view.start,
@@ -179,7 +206,15 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120): EChartsCoreOpt
             }
           : undefined,
       },
-      ...(hasVolume
+      ...(replay
+        ? [
+            line("EMA 5", ema5, "#d0d0d0"),
+            line("EMA 8", ema(closes, 8), "#c9a227"),
+            line("EMA 13", ema(closes, 13), "#7aa2ff"),
+            line("RSI", rsi14, "#c9a227", 1),
+          ]
+        : []),
+      ...(lower === "volume"
         ? [{
             name: "Hacim",
             type: "bar" as const,
