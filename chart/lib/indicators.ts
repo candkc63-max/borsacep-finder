@@ -54,10 +54,10 @@ export function replayDelay(speed: number): number {
   return 1000 / speed;
 }
 
-export function replayFocus(cursor: number, span: number): { startValue: number; endValue: number; axisMax: number } {
-  const width = Math.max(30, span);
-  const pad = Math.max(6, Math.round(width * 0.2));
+export function replayFocus(cursor: number, span: number): { startValue: number; endValue: number; axisMin: number; axisMax: number } {
+  const candles = Math.max(30, Math.round(span));
+  const pad = Math.max(4, Math.round((candles * 0.15) / 0.85));
   const endValue = cursor + pad;
-  const startValue = Math.max(0, endValue - width);
-  return { startValue, endValue, axisMax: endValue };
+  const startValue = endValue - candles - pad;
+  return { startValue, endValue, axisMin: startValue, axisMax: endValue };
 }

@@ -39,6 +39,9 @@ export function CandlestickChart() {
   const spanRef = useRef(windowPercent(1000, 120));
   const viewSpanRef = useRef(100);
   const expectedZoom = useRef<{ start: number; end: number } | null>(null);
+  const lastWindowRef = useRef<number | null>(null);
+  const userWindowRef = useRef<{ start: number; end: number } | null>(null);
+  const applyingZoom = useRef(false);
   const replayRef = useRef<Replay | null>(null);
   const [rows, setRows] = useState<OhlcBar[] | null>(null);
   const [error, setError] = useState("");
@@ -94,22 +97,46 @@ export function CandlestickChart() {
       setReplay({ cursor: event.dataIndex, start: event.dataIndex, playing: false, speed: 1, following: true });
       setActive(rows[event.dataIndex] ?? null);
     });
+    const applyZoom = (start: number, end: number) => {
+      applyingZoom.current = true;
+      expectedZoom.current = { start, end };
+      lastWindowRef.current = end - start;
+      chart.dispatchAction({ type: "dataZoom", startValue: start, endValue: end });
+      applyingZoom.current = false;
+    };
     chart.on("datazoom", () => {
+      if (applyingZoom.current) return;
       const option = chart.getOption() as { dataZoom?: Array<{ start?: number; end?: number; startValue?: number; endValue?: number }> };
       const zoom = option.dataZoom?.[0];
       const start = zoom?.startValue;
       const end = zoom?.endValue;
       if (expectedZoom.current && start != null && end != null && Math.abs(start - expectedZoom.current.start) < 0.6 && Math.abs(end - expectedZoom.current.end) < 0.6) return;
-      if (replayRef.current) {
-        if (replayRef.current.following) {
-          const next = { ...replayRef.current, following: false };
-          replayRef.current = next;
-          setReplay(next);
-        }
-        if (start != null && end != null) viewSpanRef.current = Math.max(30, end - start);
+      const current = replayRef.current;
+      if (!current) {
+        if (zoom?.start != null && zoom?.end != null) spanRef.current = { start: zoom.start, end: zoom.end };
         return;
       }
-      if (zoom?.start != null && zoom?.end != null) spanRef.current = { start: zoom.start, end: zoom.end };
+      if (start == null || end == null) return;
+      const width = end - start;
+      const previous = lastWindowRef.current;
+      const zoomed = previous != null && Math.abs(width - previous) > Math.max(1.2, previous * 0.02);
+      if (zoomed) {
+        viewSpanRef.current = Math.max(30, Math.round(width * 0.85));
+        if (current.following) {
+          const focus = replayFocus(current.cursor, viewSpanRef.current);
+          applyZoom(focus.startValue, focus.endValue);
+          setReplay((value) => (value ? { ...value } : value));
+        } else {
+          userWindowRef.current = { start, end };
+          lastWindowRef.current = width;
+        }
+        return;
+      }
+      userWindowRef.current = { start, end };
+      if (!current.following) return;
+      const next = { ...current, following: false };
+      replayRef.current = next;
+      setReplay(next);
     });
     const onResize = () => chart.resize();
     window.addEventListener("resize", onResize);
@@ -128,13 +155,19 @@ export function CandlestickChart() {
     if (!chart || !rows?.length || !replay) return;
     const prefix = replaySlice(rows, replay.cursor);
     const focus = replayFocus(replay.cursor, viewSpanRef.current);
-    const option = candleOption(prefix, 120, { axisMax: focus.axisMax });
+    const frozen = !replay.following ? userWindowRef.current : null;
+    const axisMin = frozen ? Math.min(frozen.start, focus.startValue, 0) : focus.axisMin;
+    const axisMax = frozen ? Math.max(frozen.end, replay.cursor) : focus.axisMax;
+    const option = candleOption(prefix, 120, { axisMin, axisMax });
     delete option.dataZoom;
+    const window = frozen ?? { start: focus.startValue, end: focus.endValue };
+    applyingZoom.current = true;
+    expectedZoom.current = window;
+    lastWindowRef.current = window.end - window.start;
     chart.setOption(option, { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend"] });
+    chart.dispatchAction({ type: "dataZoom", startValue: window.start, endValue: window.end });
+    applyingZoom.current = false;
     setActive(prefix[prefix.length - 1] ?? null);
-    if (!replay.following) return;
-    expectedZoom.current = { start: focus.startValue, end: focus.endValue };
-    chart.dispatchAction({ type: "dataZoom", startValue: focus.startValue, endValue: focus.endValue });
   }, [replay, rows]);
 
   useEffect(() => {

@@ -29,7 +29,7 @@ function line(name: string, data: Array<number | null>, color: string, pane = 0)
   };
 }
 
-export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisMax: number } | null = null): EChartsCoreOption {
+export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisMin: number; axisMax: number } | null = null): EChartsCoreOption {
   const hasVolume = !replay && rows.some((row) => row.volume != null && row.volume > 0);
   const lower = replay ? "rsi" : hasVolume ? "volume" : "none";
   const view = windowPercent(rows.length, visibleBars);
@@ -39,7 +39,6 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisM
   const closes = rows.map((row) => row.close);
   const ema5 = replay ? ema(closes, 5) : [];
   const rsi14 = replay ? rsi(closes, 14) : [];
-  const axisMax = replay?.axisMax ?? "dataMax";
   const volumes = rows.map((row) => ({
     value: row.volume ?? 0,
     itemStyle: { color: row.close >= row.open ? "rgba(255,255,255,0.8)" : "rgba(225,6,0,0.9)" },
@@ -53,8 +52,8 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisM
     axisLabel: showLabel ? { color: "#9a9a9a" } : { show: false },
     axisTick: { show: false },
     splitLine: { show: false },
-    min: "dataMin" as const,
-    max: axisMax,
+    min: replay ? replay.axisMin : ("dataMin" as const),
+    max: replay ? replay.axisMax : ("dataMax" as const),
   });
 
   return {
@@ -186,7 +185,8 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisM
           borderColor: UP,
           borderColor0: DOWN,
         },
-        barMaxWidth: 12,
+        barWidth: replay ? "68%" : undefined,
+        barMaxWidth: replay ? undefined : 12,
         markLine: last
           ? {
               symbol: "none",
