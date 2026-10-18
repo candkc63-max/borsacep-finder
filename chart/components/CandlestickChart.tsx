@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import * as echarts from "echarts";
 import { candleOption, windowPercent } from "../lib/candleChart";
 import { replayDelay, replayFocus, replaySlice, stepCursor } from "../lib/indicators";
-import { NAS100_CHOICE, searchCharts, type ChartChoice } from "../lib/chartSearch";
+import { NAS100_CHOICE, type ChartChoice } from "../lib/chartSearch";
+import { SymbolSearch } from "./SymbolSearch";
 import { simulateManual, validateManualOrder, type ManualOrder, type Side } from "../lib/manualBacktest";
 import { parseOhlcvCsv, type OhlcBar } from "../lib/parseOhlcv";
 import { parseJsonResponse } from "../lib/readJson";
@@ -77,8 +78,6 @@ export function CandlestickChart() {
   const replayRef = useRef<Replay | null>(null);
   const [rows, setRows] = useState<OhlcBar[] | null>(null);
   const [choice, setChoice] = useState<ChartChoice>(NAS100_CHOICE);
-  const [query, setQuery] = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState("");
   const [active, setActive] = useState<OhlcBar | null>(null);
   const [range, setRange] = useState(120);
@@ -350,8 +349,6 @@ export function CandlestickChart() {
   }
 
   function pickChart(next: ChartChoice) {
-    setMenuOpen(false);
-    setQuery("");
     setChoice(next);
   }
 
@@ -370,43 +367,10 @@ export function CandlestickChart() {
     cursor: "pointer",
   });
 
-  const found = searchCharts(query);
-
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "#000" }}>
-      <div style={{ position: "relative", padding: "8px 12px 0" }}>
-        <input
-          value={query}
-          placeholder="Hisse veya endeks ara"
-          onFocus={() => setMenuOpen(true)}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setMenuOpen(true);
-          }}
-          onBlur={() => setMenuOpen(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && found[0]) pickChart(found[0]);
-            if (event.key === "Escape") setMenuOpen(false);
-          }}
-          style={{ ...fieldStyle, width: "min(420px, 100%)", marginTop: 0, minHeight: 40 }}
-        />
-        <span style={{ marginLeft: 12, color: "#cfcfcf", font: "13px/1.4 ui-sans-serif, system-ui, sans-serif" }}>{choice.title} · {choice.detail}</span>
-        {menuOpen && (
-          <div style={{ position: "absolute", zIndex: 30, top: 52, left: 12, width: "min(420px, calc(100% - 24px))", background: "#111", border: "1px solid #3a3a3a", borderRadius: 10, maxHeight: 320, overflow: "auto" }}>
-            {found.length === 0 && <div style={{ padding: 10, color: "#777" }}>Sonuç yok</div>}
-            {found.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => pickChart(item)}
-                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", background: item.id === choice.id ? "#1c1c1c" : "transparent", color: "#f2f2f2", border: "none", cursor: "pointer", font: "14px/1.3 ui-sans-serif, system-ui, sans-serif" }}
-              >
-                {item.title} · {item.detail}
-              </button>
-            ))}
-          </div>
-        )}
+      <div style={{ display: "flex", alignItems: "flex-start", padding: "8px 12px 0" }}>
+        <SymbolSearch choice={choice} onPick={pickChart} />
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", padding: "6px 12px", color: "#cfcfcf", font: "12px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
         <span style={{ fontVariantNumeric: "tabular-nums" }}>
