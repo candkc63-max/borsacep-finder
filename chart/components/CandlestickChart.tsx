@@ -130,13 +130,23 @@ export function CandlestickChart() {
       if (typeof value === "number") pick(value);
       else if (typeof value === "string") pick(rows.findIndex((row) => row.label === value));
     });
-    chart.on("click", (raw) => {
-      const event = raw as { seriesType?: string; dataIndex?: number };
-      if (replayRef.current || event.seriesType !== "candlestick" || event.dataIndex == null) return;
+    chart.getZr().on("click", (event) => {
+      if (replayRef.current) return;
+      const point = [event.offsetX, event.offsetY];
+      const inside = chart.containPixel({ gridIndex: 0 }, point) || chart.containPixel("grid", point);
+      if (!inside) return;
+      const raw = chart.convertFromPixel({ seriesIndex: 0 }, point);
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      const index = typeof value === "number" && Number.isFinite(value)
+        ? Math.round(value)
+        : rows.findIndex((row) => row.label === String(value));
+      if (!Number.isFinite(index) || index < 0 || index >= rows.length) return;
       viewSpanRef.current = 100;
       setPanelOpen(true);
-      setReplay({ cursor: event.dataIndex, start: event.dataIndex, playing: false, speed: 1, following: true });
-      setActive(rows[event.dataIndex] ?? null);
+      const next = { cursor: index, start: index, playing: false, speed: 1, following: true };
+      replayRef.current = next;
+      setReplay(next);
+      setActive(rows[index] ?? null);
     });
     const applyZoom = (start: number, end: number) => {
       applyingZoom.current = true;
@@ -342,69 +352,63 @@ export function CandlestickChart() {
         </span>
       </div>
       <p style={{ margin: "0 12px 4px", color: "#777", font: "11px/1.3 ui-sans-serif, system-ui, sans-serif" }}>
-        {replay ? "Replay açık. Sürükleme oynatmadan bağımsızdır." : "Replay için bir muma tıkla. Sürükle: kaydır. Tekerlek: yakınlaştır."}
+        {replay ? "Replay açık. AL ve SAT alttaki çubuktadır." : "Bir muma tıkla. Replay açılınca AL, SAT, Stop Loss ve Take Profit altta açılır."}
       </p>
       {error && <p style={{ color: "#e10600", padding: "0 12px" }}>{error}</p>}
-      {replay && book && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", margin: "0 12px 8px", padding: "10px 12px", background: "#0c0c0c", border: "1px solid #3a3a3a", borderRadius: 12 }}>
-          <button type="button" onClick={() => place("long")} style={{ ...buttonStyle(false), minWidth: 88, minHeight: 44, color: "#9dffc8", fontWeight: 700 }}>AL</button>
-          <button type="button" onClick={() => place("short")} style={{ ...buttonStyle(false), minWidth: 88, minHeight: 44, color: "#ffb4b0", fontWeight: 700 }}>SAT</button>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#f2f2f2" }}>
-            Stop Loss
-            <input value={stopText} onChange={(event) => setStopText(event.target.value)} style={{ ...fieldStyle, width: 120, marginTop: 0 }} />
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#f2f2f2" }}>
-            Take Profit
-            <input value={targetText} onChange={(event) => setTargetText(event.target.value)} style={{ ...fieldStyle, width: 120, marginTop: 0 }} />
-          </label>
-          <button type="button" onClick={() => setPanelOpen((open) => !open)} style={buttonStyle(panelOpen)}>
-            {panelOpen ? "Paneli kapat" : "İşlem paneli"}
-          </button>
-          {formError && <span style={{ color: "#e10600" }}>{formError}</span>}
-        </div>
-      )}
       <div ref={ref} style={{ flex: 1, minHeight: 0 }} />
-      {replay && book && rows && panelOpen && (
-        <div style={{ margin: "0 12px 8px", maxHeight: 210, overflow: "auto", background: "#0c0c0c", border: "1px solid #2c2c2c", borderRadius: 12, padding: "10px 12px", color: "#f2f2f2", font: "13px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-            <span>Sanal bakiye <b>{money(book.equity)}</b></span>
-            <span>Gerçekleşen kâr/zarar <b style={{ color: book.realized < 0 ? "#e10600" : "#ffffff" }}>{signed(book.realized)}</b></span>
-            <span>Açık kâr/zarar <b>{signed(book.unrealized)}</b></span>
-            <span>Başlangıç <b>{money(book.startingCapital)}</b></span>
-            <span>Kazanan / kaybeden <b>{book.wins} / {book.losses}</b></span>
-            <span>Başarı <b>{book.winRate == null ? "—" : `${(book.winRate * 100).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}%`}</b></span>
-            <span>Profit factor <b>{book.profitFactor == null ? "—" : book.profitFactor.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}</b></span>
-            <span>Maks. drawdown <b>{money(book.maxDrawdown)}</b></span>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-            <label>Sermaye<input value={capitalText} onChange={(event) => setCapitalText(event.target.value)} style={{ ...fieldStyle, width: 110 }} /></label>
-            <label>Komisyon %<input value={feeText} onChange={(event) => setFeeText(event.target.value)} style={{ ...fieldStyle, width: 80 }} /></label>
-            <label>Giriş<input value={entryText} onChange={(event) => setEntryText(event.target.value)} style={{ ...fieldStyle, width: 120 }} /></label>
-            <label>Miktar<input value={sizeText} onChange={(event) => setSizeText(event.target.value)} style={{ ...fieldStyle, width: 80 }} /></label>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <strong>Açık pozisyon</strong>
-            {book.open.length === 0 && <span style={{ color: "#777" }}> — yok</span>}
-            {book.open.map((trade) => (
-              <div key={trade.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 6 }}>
-                <span>{trade.direction === "long" ? "Long" : "Short"} · {trade.size} · giriş {price(trade.entry)} · stop {price(trade.stop)} · hedef {price(trade.target)} · {signed(trade.unrealized ?? 0)}</span>
-                <button type="button" onClick={() => closeAtMarket(trade.id)} style={buttonStyle(false)}>Kapat</button>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <strong>İşlem geçmişi</strong>
-            {book.closed.length === 0 && <span style={{ color: "#777" }}> — kapanan işlem yok</span>}
-            {book.closed.map((trade) => (
-              <button key={trade.id} type="button" onClick={() => showTrade(trade.entryCursor)} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 6, padding: "6px 8px", background: "#111", color: "#f2f2f2", border: "1px solid #2c2c2c", borderRadius: 8, cursor: "pointer" }}>
-                {clock(rows[trade.entryCursor].time)} · {trade.direction === "long" ? "Long" : "Short"} · {trade.size} · giriş {price(trade.entry)} · çıkış {trade.exit == null ? "—" : price(trade.exit)} · stop {price(trade.stop)} · hedef {price(trade.target)} · {reasonLabel(trade.reason)} · <span style={{ color: (trade.net ?? 0) < 0 ? "#e10600" : "#ffffff" }}>{signed(trade.net ?? 0)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       <div style={{ display: "flex", justifyContent: "center", padding: "8px 12px 14px" }}>
-        <div style={{ width: "min(760px, 100%)", background: "#0c0c0c", border: "1px solid #2c2c2c", borderRadius: 14, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ width: "min(980px, 100%)", background: "#0c0c0c", border: "1px solid #3a3a3a", borderRadius: 14, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <button type="button" disabled={!replay} onClick={() => place("long")} style={{ ...buttonStyle(false), minWidth: 88, minHeight: 44, color: "#9dffc8", fontWeight: 700, opacity: replay ? 1 : 0.45 }}>AL</button>
+            <button type="button" disabled={!replay} onClick={() => place("short")} style={{ ...buttonStyle(false), minWidth: 88, minHeight: 44, color: "#ffb4b0", fontWeight: 700, opacity: replay ? 1 : 0.45 }}>SAT</button>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#f2f2f2", font: "14px/1.2 ui-sans-serif, system-ui, sans-serif" }}>
+              Stop Loss
+              <input disabled={!replay} placeholder="fiyat" value={stopText} onChange={(event) => setStopText(event.target.value)} style={{ ...fieldStyle, width: 120, marginTop: 0, borderColor: "#8a8a8a" }} />
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#f2f2f2", font: "14px/1.2 ui-sans-serif, system-ui, sans-serif" }}>
+              Take Profit
+              <input disabled={!replay} placeholder="fiyat" value={targetText} onChange={(event) => setTargetText(event.target.value)} style={{ ...fieldStyle, width: 120, marginTop: 0, borderColor: "#8a8a8a" }} />
+            </label>
+            <button type="button" disabled={!replay} onClick={() => setPanelOpen((open) => !open)} style={{ ...buttonStyle(panelOpen), opacity: replay ? 1 : 0.45 }}>
+              {panelOpen ? "Paneli kapat" : "İşlem paneli"}
+            </button>
+            {formError && <span style={{ color: "#e10600", fontSize: 13 }}>{formError}</span>}
+          </div>
+          {replay && book && rows && panelOpen && (
+            <div style={{ color: "#f2f2f2", font: "13px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+                <span>Sanal bakiye <b>{money(book.equity)}</b></span>
+                <span>Gerçekleşen kâr/zarar <b style={{ color: book.realized < 0 ? "#e10600" : "#ffffff" }}>{signed(book.realized)}</b></span>
+                <span>Açık kâr/zarar <b>{signed(book.unrealized)}</b></span>
+                <span>Kazanan / kaybeden <b>{book.wins} / {book.losses}</b></span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                <label>Sermaye<input value={capitalText} onChange={(event) => setCapitalText(event.target.value)} style={{ ...fieldStyle, width: 110 }} /></label>
+                <label>Komisyon %<input value={feeText} onChange={(event) => setFeeText(event.target.value)} style={{ ...fieldStyle, width: 80 }} /></label>
+                <label>Giriş<input value={entryText} onChange={(event) => setEntryText(event.target.value)} style={{ ...fieldStyle, width: 120 }} /></label>
+                <label>Miktar<input value={sizeText} onChange={(event) => setSizeText(event.target.value)} style={{ ...fieldStyle, width: 80 }} /></label>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <strong>Açık pozisyon</strong>
+                {book.open.length === 0 && <span style={{ color: "#777" }}> — yok</span>}
+                {book.open.map((trade) => (
+                  <div key={trade.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 6 }}>
+                    <span>{trade.direction === "long" ? "Long" : "Short"} · {trade.size} · giriş {price(trade.entry)} · stop {price(trade.stop)} · hedef {price(trade.target)} · {signed(trade.unrealized ?? 0)}</span>
+                    <button type="button" onClick={() => closeAtMarket(trade.id)} style={buttonStyle(false)}>Kapat</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, maxHeight: 120, overflow: "auto" }}>
+                <strong>İşlem geçmişi</strong>
+                {book.closed.length === 0 && <span style={{ color: "#777" }}> — kapanan işlem yok</span>}
+                {book.closed.map((trade) => (
+                  <button key={trade.id} type="button" onClick={() => showTrade(trade.entryCursor)} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 6, padding: "6px 8px", background: "#111", color: "#f2f2f2", border: "1px solid #2c2c2c", borderRadius: 8, cursor: "pointer" }}>
+                    {clock(rows[trade.entryCursor].time)} · {trade.direction === "long" ? "Long" : "Short"} · giriş {price(trade.entry)} · çıkış {trade.exit == null ? "—" : price(trade.exit)} · {reasonLabel(trade.reason)} · <span style={{ color: (trade.net ?? 0) < 0 ? "#e10600" : "#ffffff" }}>{signed(trade.net ?? 0)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, color: "#f2f2f2", font: "14px/1.3 ui-sans-serif, system-ui, sans-serif" }}>
             <span>{playhead ? clock(playhead.time) : "Başlamak için bir muma tıkla"}</span>
             <span style={{ fontVariantNumeric: "tabular-nums", color: "#cfcfcf" }}>
