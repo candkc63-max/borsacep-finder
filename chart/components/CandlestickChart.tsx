@@ -1,19 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import * as echarts from "echarts";
 import { candleOption, windowPercent } from "../lib/candleChart";
+import { choiceById, NAS100_CHOICE, searchCharts, type ChartChoice } from "../lib/chartSearch";
+import { intervalsFor, type ChartPoint, type ChartPrefs, type Drawing } from "../lib/chartPrefs";
 import { replayDelay, replayFocus, replaySlice, stepCursor } from "../lib/indicators";
-import { NAS100_CHOICE, searchCharts, type ChartChoice } from "../lib/chartSearch";
 import { simulateManual, validateManualOrder, type ManualOrder, type Side } from "../lib/manualBacktest";
 import { parseOhlcvCsv, type OhlcBar } from "../lib/parseOhlcv";
-
-const RANGES = [
-  { label: "2 gün", bars: 48 },
-  { label: "5 gün", bars: 120 },
-  { label: "20 gün", bars: 480 },
-  { label: "Tümü", bars: 100000 },
-];
+import { BottomDock, type DockTab } from "./terminal/BottomDock";
+import { TopBar } from "./terminal/TopBar";
+import { ToolRail, type DrawTool } from "./terminal/ToolRail";
+import "./terminal/terminal.css";
 
 const SPEEDS = [0.5, 1, 2, 5, 10];
 
@@ -44,20 +42,6 @@ function reasonLabel(reason: string | null) {
   return "";
 }
 
-const fieldStyle: CSSProperties = {
-  display: "block",
-  width: "100%",
-  boxSizing: "border-box",
-  marginTop: 4,
-  background: "#111111",
-  color: "#f2f2f2",
-  border: "1px solid #3a3a3a",
-  borderRadius: 8,
-  minHeight: 36,
-  padding: "0 8px",
-  fontSize: 14,
-};
-
 function clock(time: string) {
   const match = time.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (!match) return time;
@@ -65,6 +49,7 @@ function clock(time: string) {
 }
 
 export function CandlestickChart() {
+  const shellRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const spanRef = useRef(windowPercent(1000, 120));
@@ -91,13 +76,36 @@ export function CandlestickChart() {
   const [targetText, setTargetText] = useState("");
   const [formError, setFormError] = useState("");
   const [panelOpen, setPanelOpen] = useState(true);
+  const [panelHeight, setPanelHeight] = useState(280);
+  const [tab, setTab] = useState<DockTab>("strateji");
+  const [tool, setTool] = useState<DrawTool>("cursor");
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [draft, setDraft] = useState<ChartPoint | null>(null);
+  const [chartType, setChartType] = useState<"mum" | "cizgi">("mum");
+  const [ema5, setEma5] = useState(false);
+  const [ema8, setEma8] = useState(false);
+  const [ema13, setEma13] = useState(false);
+  const [rsiOn, setRsiOn] = useState(false);
+  const [gridOn, setGridOn] = useState(true);
+  const [lastPrice, setLastPrice] = useState(true);
+  const [narrow, setNarrow] = useState(false);
+  const [arm, setArm] = useState(false);
   const orderId = useRef(1);
+  const toolRef = useRef<DrawTool>("cursor");
+  const armRef = useRef(false);
+  const draftRef = useRef<ChartPoint | null>(null);
+  const prefsRef = useRef<ChartPrefs | null>(null);
   replayRef.current = replay;
+  toolRef.current = tool;
+  armRef.current = arm;
+  draftRef.current = draft;
 
   useEffect(() => {
     let cancel = false;
     setReplay(null);
     setOrders([]);
+    setRows(null);
+    setActive(null);
     setFormError("");
     setError("");
     const load = choice.source === "csv"
@@ -144,7 +152,6 @@ export function CandlestickChart() {
       else if (typeof value === "string") pick(rows.findIndex((row) => row.label === value));
     });
     chart.getZr().on("click", (event) => {
-      if (replayRef.current) return;
       const point = [event.offsetX, event.offsetY];
       const inside = chart.containPixel({ gridIndex: 0 }, point) || chart.containPixel("grid", point);
       if (!inside) return;
@@ -153,9 +160,41 @@ export function CandlestickChart() {
       const index = typeof value === "number" && Number.isFinite(value)
         ? Math.round(value)
         : rows.findIndex((row) => row.label === String(value));
+      const priceValue = Array.isArray(raw) ? Number(raw[1]) : Number.NaN;
+      const activeTool = toolRef.current;
+      if (activeTool !== "cursor") {
+        if (!Number.isFinite(index) || index < 0 || index >= rows.length || !Number.isFinite(priceValue)) return;
+        if (activeTool === "hline") {
+          setDrawings((list) => [...list, { id: `cizim-${Date.now()}`, kind: "hline", price: priceValue }]);
+          return;
+        }
+        const currentDraft = draftRef.current;
+        if (!currentDraft) {
+          const nextDraft = { index, price: priceValue };
+          draftRef.current = nextDraft;
+          setDraft(nextDraft);
+          return;
+        }
+        setDrawings((list) => [...list, {
+          id: `cizim-${Date.now()}`,
+          kind: activeTool,
+          a: currentDraft,
+          b: { index, price: priceValue },
+        }]);
+        draftRef.current = null;
+        setDraft(null);
+        return;
+      }
+      if (replayRef.current && !armRef.current) return;
       if (!Number.isFinite(index) || index < 0 || index >= rows.length) return;
+      if (armRef.current) {
+        armRef.current = false;
+        setArm(false);
+        setOrders([]);
+      }
       viewSpanRef.current = 100;
       setPanelOpen(true);
+      setTab("replay");
       const next = { cursor: index, start: index, playing: false, speed: 1, following: true };
       replayRef.current = next;
       setReplay(next);
@@ -214,6 +253,25 @@ export function CandlestickChart() {
     };
   }, [rows]);
 
+  useEffect(() => {
+    const read = () => setNarrow(window.innerWidth < 760);
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+
+  const prefs = useMemo<ChartPrefs>(() => ({
+    chartType,
+    ema5,
+    ema8,
+    ema13,
+    rsi: rsiOn,
+    grid: gridOn,
+    lastPrice,
+    drawings,
+  }), [chartType, ema5, ema8, ema13, rsiOn, gridOn, lastPrice, drawings]);
+  prefsRef.current = prefs;
+
   const capital = Number(capitalText);
   const feeRate = Number(feeText);
   const rate = Number.isFinite(feeRate) ? feeRate / 100 : 0;
@@ -235,7 +293,7 @@ export function CandlestickChart() {
     const frozen = !replay.following ? userWindowRef.current : null;
     const axisMin = frozen ? Math.min(frozen.start, focus.startValue, 0) : focus.axisMin;
     const axisMax = frozen ? Math.max(frozen.end, replay.cursor) : focus.axisMax;
-    const option = candleOption(prefix, 120, { axisMin, axisMax, trades: book?.marks ?? [] });
+    const option = candleOption(prefix, 120, { axisMin, axisMax, trades: book?.marks ?? [] }, prefs);
     delete option.dataZoom;
     const window = frozen ?? { start: focus.startValue, end: focus.endValue };
     applyingZoom.current = true;
@@ -245,7 +303,15 @@ export function CandlestickChart() {
     chart.dispatchAction({ type: "dataZoom", startValue: window.start, endValue: window.end });
     applyingZoom.current = false;
     setActive(prefix[prefix.length - 1] ?? null);
-  }, [replay, rows, book]);
+  }, [replay, rows, book, prefs]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !rows?.length || replay) return;
+    const option = candleOption(rows, range, null, prefs);
+    delete option.dataZoom;
+    chart.setOption(option, { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend"] });
+  }, [prefs, rows, range, replay]);
 
   useEffect(() => {
     if (!replay?.playing || !rows?.length) return undefined;
@@ -289,7 +355,7 @@ export function CandlestickChart() {
     setOrders([]);
     setFormError("");
     if (rows?.length && chartRef.current) {
-      chartRef.current.setOption(candleOption(rows, 120), { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend", "dataZoom"] });
+      chartRef.current.setOption(candleOption(rows, 120, null, prefsRef.current ?? undefined), { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend", "dataZoom"] });
       setActive(rows[rows.length - 1] ?? null);
     }
   }
@@ -337,173 +403,226 @@ export function CandlestickChart() {
   const previous = rows && active ? rows[Math.max(0, rows.indexOf(active) - 1)] : undefined;
   const change = active && previous && previous !== active ? active.close - previous.close : null;
 
-  const buttonStyle = (on: boolean): CSSProperties => ({
-    background: on ? "#ffffff" : "#161616",
-    color: on ? "#111111" : "#f2f2f2",
-    border: "1px solid #3a3a3a",
-    borderRadius: 8,
-    minHeight: 36,
-    padding: "0 12px",
-    fontSize: 14,
-    cursor: "pointer",
-  });
+  function onInterval(id: string) {
+    const next = choiceById(id);
+    if (next && next.id !== choice.id) pickChart(next);
+  }
+
+  function toggleIndicator(key: "ema5" | "ema8" | "ema13" | "rsi") {
+    if (key === "ema5") setEma5((value) => !value);
+    if (key === "ema8") setEma8((value) => !value);
+    if (key === "ema13") setEma13((value) => !value);
+    if (key === "rsi") setRsiOn((value) => !value);
+  }
+
+  function clearDrawings() {
+    draftRef.current = null;
+    setDraft(null);
+    setDrawings([]);
+  }
+
+  function chooseTool(next: DrawTool) {
+    draftRef.current = null;
+    setDraft(null);
+    setTool(next);
+  }
+
+  function armStart() {
+    setTool("cursor");
+    setArm(true);
+    setPanelOpen(true);
+    setTab("replay");
+  }
+
+  function onResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startH = panelHeight;
+    const move = (clientY: number) => {
+      setPanelHeight(Math.min(window.innerHeight * 0.62, Math.max(140, startH - (clientY - startY))));
+    };
+    const onPointer = (pointer: PointerEvent) => move(pointer.clientY);
+    const onMouse = (pointer: MouseEvent) => move(pointer.clientY);
+    const up = () => {
+      window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("mousemove", onMouse);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("pointermove", onPointer);
+    window.addEventListener("mousemove", onMouse);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("mouseup", up);
+  }
+
+  function toggleFullscreen() {
+    const shell = shellRef.current;
+    if (!shell) return;
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void shell.requestFullscreen();
+  }
 
   const found = searchCharts(query);
+  const quote = active
+    ? `${choice.title}  ${active.label}  A ${price(active.open)}  Y ${price(active.high)}  D ${price(active.low)}  K ${price(active.close)}`
+    : `${choice.title} yükleniyor`;
+
+  const strategy = (
+    <div>
+      <p className="term-note">{replay ? "Long için AL, short için SAT. Stop ve hedef grafik çizgisi olur." : "İşlem açmak için önce Bar Replay başlat. Grafikte bir muma tıkla."}</p>
+      <div className="term-row">
+        <button type="button" className="term-btn term-buy" disabled={!replay} onClick={() => place("long")}>AL</button>
+        <button type="button" className="term-btn term-sell" disabled={!replay} onClick={() => place("short")}>SAT</button>
+        <label className="term-label">Miktar<input className="term-field" disabled={!replay} value={sizeText} onChange={(event) => setSizeText(event.target.value)} /></label>
+        <label className="term-label">Giriş<input className="term-field" disabled={!replay} value={entryText} onChange={(event) => setEntryText(event.target.value)} /></label>
+        <label className="term-label">Stop Loss<input className="term-field" disabled={!replay} value={stopText} onChange={(event) => setStopText(event.target.value)} /></label>
+        <label className="term-label">Take Profit<input className="term-field" disabled={!replay} value={targetText} onChange={(event) => setTargetText(event.target.value)} /></label>
+        <label className="term-label">Sermaye<input className="term-field" value={capitalText} onChange={(event) => setCapitalText(event.target.value)} /></label>
+        <label className="term-label">Komisyon %<input className="term-field" value={feeText} onChange={(event) => setFeeText(event.target.value)} /></label>
+      </div>
+      {formError && <p className="term-down">{formError}</p>}
+      <div style={{ marginTop: 10 }}>
+        <strong>Açık pozisyon</strong>
+        {(!book || book.open.length === 0) && <span className="term-note"> yok</span>}
+        {book?.open.map((trade) => (
+          <div key={trade.id} className="term-row" style={{ marginTop: 6 }}>
+            <span>{trade.direction === "long" ? "Long" : "Short"} · {trade.size} · giriş {price(trade.entry)} · stop {price(trade.stop)} · hedef {price(trade.target)} · {signed(trade.unrealized ?? 0)}</span>
+            <button type="button" className="term-btn" onClick={() => closeAtMarket(trade.id)}>Kapat</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const history = (
+    <div>
+      {(!rows || !book || book.closed.length === 0) && <p className="term-note">Kapanan işlem yok.</p>}
+      {rows && book && book.closed.length > 0 && (
+        <table className="term-table">
+          <thead>
+            <tr><th>Zaman</th><th>Yön</th><th>Giriş</th><th>Çıkış</th><th>Neden</th><th>Sonuç</th></tr>
+          </thead>
+          <tbody>
+            {book.closed.map((trade) => (
+              <tr key={trade.id}>
+                <td><button type="button" className="term-btn" onClick={() => showTrade(trade.entryCursor)}>{clock(rows[trade.entryCursor].time)}</button></td>
+                <td>{trade.direction === "long" ? "Long" : "Short"}</td>
+                <td>{price(trade.entry)}</td>
+                <td>{trade.exit == null ? "—" : price(trade.exit)}</td>
+                <td>{reasonLabel(trade.reason)}</td>
+                <td className={(trade.net ?? 0) < 0 ? "term-down" : "term-up"}>{signed(trade.net ?? 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+
+  const performance = (
+    <div className="term-stats">
+      <div className="term-stat"><span>Sanal bakiye</span><b>{book ? money(book.equity) : "—"}</b></div>
+      <div className="term-stat"><span>Gerçekleşen</span><b className={book && book.realized < 0 ? "term-down" : "term-up"}>{book ? signed(book.realized) : "—"}</b></div>
+      <div className="term-stat"><span>Açık kâr/zarar</span><b>{book ? signed(book.unrealized) : "—"}</b></div>
+      <div className="term-stat"><span>Kazanan / kaybeden</span><b>{book ? `${book.wins} / ${book.losses}` : "—"}</b></div>
+      <div className="term-stat"><span>Kazanma oranı</span><b>{book && book.wins + book.losses > 0 ? `%${((book.wins / (book.wins + book.losses)) * 100).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}` : "—"}</b></div>
+      <div className="term-stat"><span>Kâr faktörü</span><b>{book ? (book.profitFactor == null ? "—" : book.profitFactor.toLocaleString("tr-TR", { maximumFractionDigits: 2 })) : "—"}</b></div>
+      <div className="term-stat"><span>Maks. düşüş</span><b>{book ? money(book.maxDrawdown) : "—"}</b></div>
+    </div>
+  );
+
+  const replayPane = (
+    <div>
+      <p className="term-note">
+        {arm ? "Başlangıç mumu için grafiğe tıkla." : replay ? `${playhead ? clock(playhead.time) : ""} · ${replay.cursor + 1} / ${rows?.length ?? 0}` : "Başlangıç için grafiğe tıkla ya da aşağıdaki düğmeyi kullan."}
+        {draft ? " İlk nokta seçildi. İkinci noktayı tıkla." : ""}
+      </p>
+      <div className="term-row">
+        <button type="button" className={arm ? "term-btn on" : "term-btn"} onClick={armStart}>Başlangıç seç</button>
+        <button type="button" className={replay?.playing ? "term-btn on" : "term-btn"} disabled={!replay} onClick={() => replay && setReplay({ ...replay, playing: !replay.playing })}>{replay?.playing ? "Duraklat" : "Oynat"}</button>
+        <button type="button" className="term-btn" disabled={!replay || !rows} onClick={() => replay && rows && setReplay({ ...replay, cursor: stepCursor(replay.cursor, -1, rows.length - 1) })}>Geri</button>
+        <button type="button" className="term-btn" disabled={!replay || !rows} onClick={() => replay && rows && setReplay({ ...replay, cursor: stepCursor(replay.cursor, 1, rows.length - 1) })}>İleri</button>
+        {SPEEDS.map((speed) => (
+          <button key={speed} type="button" className={replay?.speed === speed ? "term-btn on" : "term-btn"} disabled={!replay} onClick={() => replay && setReplay({ ...replay, speed })}>{speed}x</button>
+        ))}
+        <button type="button" className="term-btn" disabled={!replay} onClick={() => replay && setReplay({ ...replay, cursor: replay.start, following: true })}>Başa dön</button>
+        <button type="button" className="term-btn" disabled={!replay} onClick={exitReplay}>Çık</button>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(0, (rows?.length ?? 1) - 1)}
+        value={replay?.cursor ?? 0}
+        disabled={!replay}
+        aria-label="Replay konumu"
+        onChange={(event) => {
+          if (!replay) return;
+          setReplay({ ...replay, playing: false, cursor: Number(event.target.value), following: true });
+        }}
+        style={{ width: "100%", marginTop: 10, accentColor: "#f2f2f2" }}
+      />
+    </div>
+  );
+
+  const panes = { strateji: strategy, gecmis: history, performans: performance, replay: replayPane };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#000" }}>
-      <div style={{ position: "relative", padding: "8px 12px 0" }}>
-        <input
-          value={query}
-          placeholder="Hisse veya endeks ara"
-          onFocus={() => setMenuOpen(true)}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setMenuOpen(true);
-          }}
-          onBlur={() => setMenuOpen(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && found[0]) pickChart(found[0]);
-            if (event.key === "Escape") setMenuOpen(false);
-          }}
-          style={{ ...fieldStyle, width: "min(420px, 100%)", marginTop: 0, minHeight: 40 }}
-        />
-        <span style={{ marginLeft: 12, color: "#cfcfcf", font: "13px/1.4 ui-sans-serif, system-ui, sans-serif" }}>{choice.title} · {choice.detail}</span>
-        {menuOpen && (
-          <div style={{ position: "absolute", zIndex: 30, top: 52, left: 12, width: "min(420px, calc(100% - 24px))", background: "#111", border: "1px solid #3a3a3a", borderRadius: 10, maxHeight: 320, overflow: "auto" }}>
-            {found.length === 0 && <div style={{ padding: 10, color: "#777" }}>Sonuç yok</div>}
-            {found.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => pickChart(item)}
-                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", background: item.id === choice.id ? "#1c1c1c" : "transparent", color: "#f2f2f2", border: "none", cursor: "pointer", font: "14px/1.3 ui-sans-serif, system-ui, sans-serif" }}
-              >
-                {item.title} · {item.detail}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", padding: "6px 12px", color: "#cfcfcf", font: "12px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
-        <span style={{ fontVariantNumeric: "tabular-nums" }}>
-          {active
-            ? `${active.label}  A ${price(active.open)}  Y ${price(active.high)}  D ${price(active.low)}  K ${price(active.close)}`
-            : "Mum yükleniyor"}
-          {change != null && (
-            <b style={{ color: change < 0 ? "#e10600" : "#ffffff", fontWeight: 600 }}>
-              {"  "}{change > 0 ? "+" : ""}{price(change)}
-            </b>
-          )}
-        </span>
-        <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          {RANGES.map((item) => (
-            <button key={item.label} type="button" onClick={() => showBars(item.bars)} style={buttonStyle(range === item.bars)}>
-              {item.label}
-            </button>
-          ))}
-          <button type="button" onClick={jumpToEnd} style={buttonStyle(false)}>Sona</button>
-        </span>
-      </div>
-      <p style={{ margin: "0 12px 4px", color: "#777", font: "11px/1.3 ui-sans-serif, system-ui, sans-serif" }}>
-        {replay ? "Replay açık. AL ve SAT alttaki çubuktadır." : "Bir muma tıkla. Replay açılınca AL, SAT, Stop Loss ve Take Profit altta açılır."}
-      </p>
-      {error && <p style={{ color: "#e10600", padding: "0 12px" }}>{error}</p>}
-      <div ref={ref} style={{ flex: 1, minHeight: 0 }} />
-      <div style={{ display: "flex", justifyContent: "center", padding: "8px 12px 14px" }}>
-        <div style={{ width: "min(980px, 100%)", background: "#0c0c0c", border: "1px solid #3a3a3a", borderRadius: 14, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <button type="button" disabled={!replay} onClick={() => place("long")} style={{ ...buttonStyle(false), minWidth: 88, minHeight: 44, color: "#9dffc8", fontWeight: 700, opacity: replay ? 1 : 0.45 }}>AL</button>
-            <button type="button" disabled={!replay} onClick={() => place("short")} style={{ ...buttonStyle(false), minWidth: 88, minHeight: 44, color: "#ffb4b0", fontWeight: 700, opacity: replay ? 1 : 0.45 }}>SAT</button>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#f2f2f2", font: "14px/1.2 ui-sans-serif, system-ui, sans-serif" }}>
-              Stop Loss
-              <input disabled={!replay} placeholder="fiyat" value={stopText} onChange={(event) => setStopText(event.target.value)} style={{ ...fieldStyle, width: 120, marginTop: 0, borderColor: "#8a8a8a" }} />
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#f2f2f2", font: "14px/1.2 ui-sans-serif, system-ui, sans-serif" }}>
-              Take Profit
-              <input disabled={!replay} placeholder="fiyat" value={targetText} onChange={(event) => setTargetText(event.target.value)} style={{ ...fieldStyle, width: 120, marginTop: 0, borderColor: "#8a8a8a" }} />
-            </label>
-            <button type="button" disabled={!replay} onClick={() => setPanelOpen((open) => !open)} style={{ ...buttonStyle(panelOpen), opacity: replay ? 1 : 0.45 }}>
-              {panelOpen ? "Paneli kapat" : "İşlem paneli"}
-            </button>
-            {formError && <span style={{ color: "#e10600", fontSize: 13 }}>{formError}</span>}
-          </div>
-          {replay && book && rows && panelOpen && (
-            <div style={{ color: "#f2f2f2", font: "13px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-                <span>Sanal bakiye <b>{money(book.equity)}</b></span>
-                <span>Gerçekleşen kâr/zarar <b style={{ color: book.realized < 0 ? "#e10600" : "#ffffff" }}>{signed(book.realized)}</b></span>
-                <span>Açık kâr/zarar <b>{signed(book.unrealized)}</b></span>
-                <span>Kazanan / kaybeden <b>{book.wins} / {book.losses}</b></span>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-                <label>Sermaye<input value={capitalText} onChange={(event) => setCapitalText(event.target.value)} style={{ ...fieldStyle, width: 110 }} /></label>
-                <label>Komisyon %<input value={feeText} onChange={(event) => setFeeText(event.target.value)} style={{ ...fieldStyle, width: 80 }} /></label>
-                <label>Giriş<input value={entryText} onChange={(event) => setEntryText(event.target.value)} style={{ ...fieldStyle, width: 120 }} /></label>
-                <label>Miktar<input value={sizeText} onChange={(event) => setSizeText(event.target.value)} style={{ ...fieldStyle, width: 80 }} /></label>
-              </div>
-              <div style={{ marginTop: 8 }}>
-                <strong>Açık pozisyon</strong>
-                {book.open.length === 0 && <span style={{ color: "#777" }}> — yok</span>}
-                {book.open.map((trade) => (
-                  <div key={trade.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 6 }}>
-                    <span>{trade.direction === "long" ? "Long" : "Short"} · {trade.size} · giriş {price(trade.entry)} · stop {price(trade.stop)} · hedef {price(trade.target)} · {signed(trade.unrealized ?? 0)}</span>
-                    <button type="button" onClick={() => closeAtMarket(trade.id)} style={buttonStyle(false)}>Kapat</button>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 8, maxHeight: 120, overflow: "auto" }}>
-                <strong>İşlem geçmişi</strong>
-                {book.closed.length === 0 && <span style={{ color: "#777" }}> — kapanan işlem yok</span>}
-                {book.closed.map((trade) => (
-                  <button key={trade.id} type="button" onClick={() => showTrade(trade.entryCursor)} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 6, padding: "6px 8px", background: "#111", color: "#f2f2f2", border: "1px solid #2c2c2c", borderRadius: 8, cursor: "pointer" }}>
-                    {clock(rows[trade.entryCursor].time)} · {trade.direction === "long" ? "Long" : "Short"} · giriş {price(trade.entry)} · çıkış {trade.exit == null ? "—" : price(trade.exit)} · {reasonLabel(trade.reason)} · <span style={{ color: (trade.net ?? 0) < 0 ? "#e10600" : "#ffffff" }}>{signed(trade.net ?? 0)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, color: "#f2f2f2", font: "14px/1.3 ui-sans-serif, system-ui, sans-serif" }}>
-            <span>{playhead ? clock(playhead.time) : "Başlamak için bir muma tıkla"}</span>
-            <span style={{ fontVariantNumeric: "tabular-nums", color: "#cfcfcf" }}>
-              {replay && rows ? `${replay.cursor + 1} / ${rows.length}` : rows ? `${rows.length} mum` : ""}
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(0, (rows?.length ?? 1) - 1)}
-            value={replay?.cursor ?? (rows ? rows.length - 1 : 0)}
-            disabled={!replay}
-            onChange={(event) => {
-              if (!replay) return;
-              setReplay({ ...replay, playing: false, cursor: Number(event.target.value), following: true });
-            }}
-            style={{ width: "100%", accentColor: "#ffffff" }}
-          />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-            <button type="button" disabled={!replay} onClick={() => replay && setReplay({ ...replay, playing: !replay.playing })} style={buttonStyle(!!replay?.playing)}>
-              {replay?.playing ? "Duraklat" : "Oynat"}
-            </button>
-            <button type="button" disabled={!replay || !rows} onClick={() => replay && rows && setReplay({ ...replay, cursor: stepCursor(replay.cursor, -1, rows.length - 1) })} style={buttonStyle(false)}>
-              Geri
-            </button>
-            <button type="button" disabled={!replay || !rows} onClick={() => replay && rows && setReplay({ ...replay, cursor: stepCursor(replay.cursor, 1, rows.length - 1) })} style={buttonStyle(false)}>
-              İleri
-            </button>
-            {SPEEDS.map((speed) => (
-              <button key={speed} type="button" disabled={!replay} onClick={() => replay && setReplay({ ...replay, speed })} style={buttonStyle(replay?.speed === speed)}>
-                {speed}x
-              </button>
-            ))}
-            <button type="button" disabled={!replay} onClick={() => replay && setReplay({ ...replay, cursor: replay.start, following: true })} style={buttonStyle(false)}>
-              Başa dön
-            </button>
-            <button type="button" disabled={!replay} onClick={exitReplay} style={buttonStyle(false)}>
-              Çık
-            </button>
-          </div>
+    <div ref={shellRef} className={narrow ? "term narrow" : "term"} data-testid="terminal">
+      <TopBar
+        query={query}
+        onQuery={setQuery}
+        menuOpen={menuOpen}
+        onMenu={setMenuOpen}
+        results={found}
+        onPick={pickChart}
+        onSearchKey={(key) => {
+          if (key === "Enter" && found[0]) pickChart(found[0]);
+          if (key === "Escape") setMenuOpen(false);
+        }}
+        choice={choice}
+        intervals={intervalsFor(choice)}
+        onInterval={onInterval}
+        chartType={chartType}
+        onChartType={setChartType}
+        indicators={{ ema5, ema8, ema13, rsi: rsiOn }}
+        onIndicator={toggleIndicator}
+        grid={gridOn}
+        lastPrice={lastPrice}
+        onGrid={() => setGridOn((value) => !value)}
+        onLastPrice={() => setLastPrice((value) => !value)}
+        onBars={showBars}
+        onJump={jumpToEnd}
+        replayOn={!!replay}
+        onReplay={() => {
+          setPanelOpen(true);
+          setTab("replay");
+        }}
+        onFullscreen={toggleFullscreen}
+        quote={quote}
+        change={change}
+      />
+      {error && <p className="term-down" style={{ margin: "4px 8px" }}>{error}</p>}
+      <div className="term-body">
+        <ToolRail tool={tool} onTool={chooseTool} onClear={clearDrawings} />
+        <div className="term-stage">
+          <div ref={ref} className="term-chart" data-testid="term-chart" />
+          <BottomDock
+            open={panelOpen}
+            height={panelHeight}
+            tab={tab}
+            onTab={setTab}
+            onClose={() => setPanelOpen(false)}
+            onOpen={() => setPanelOpen(true)}
+            onResizeStart={onResizeStart}
+            replayStrip={replay ? (
+              <>
+                <button type="button" className="term-btn" onClick={() => setReplay({ ...replay, playing: !replay.playing })}>{replay.playing ? "Duraklat" : "Oynat"}</button>
+                <button type="button" className="term-btn" onClick={exitReplay}>Çık</button>
+              </>
+            ) : null}
+          >
+            {panes[tab]}
+          </BottomDock>
         </div>
       </div>
     </div>
