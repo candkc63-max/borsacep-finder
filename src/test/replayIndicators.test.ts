@@ -25,9 +25,15 @@ describe("bar replay", () => {
     expect(stepCursor(4, 1, 10)).toBe(5);
     expect(stepCursor(0, -1, 10)).toBe(0);
     expect(stepCursor(10, 1, 10)).toBe(10);
-    const focus = replayFocus(80, 100);
-    expect(focus.endValue - focus.startValue).toBe(100);
-    expect(focus.axisMax - 80).toBeGreaterThanOrEqual(18);
+    const focus = replayFocus(200, 100);
+    expect(200 - focus.startValue).toBe(100);
+    const window = focus.endValue - focus.startValue;
+    const gap = focus.axisMax - 200;
+    expect(gap / window).toBeGreaterThanOrEqual(0.14);
+    expect(gap / window).toBeLessThanOrEqual(0.16);
+    const next = replayFocus(201, 100);
+    expect(next.endValue - next.startValue).toBe(window);
+    expect(next.startValue).toBe(focus.startValue + 1);
     expect(replayDelay(2)).toBe(500);
     expect(replayDelay(10)).toBe(100);
   });
