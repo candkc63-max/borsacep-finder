@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import { loadChartBars } from "./src/server/chartBars";
 import { loadLiveQuotes } from "./src/server/liveQuotes";
 
 // https://vitejs.dev/config/
@@ -27,7 +28,21 @@ export default defineConfig(({ mode }) => {
         name: "bist-quotes",
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            if (req.url?.split("?")[0] !== "/api/bist-quotes") return next();
+            const path = req.url?.split("?")[0];
+            if (path === "/api/chart-bars") {
+              const id = new URL(req.url ?? "", "http://localhost").searchParams.get("id") ?? "";
+              try {
+                const bars = await loadChartBars(id);
+                res.setHeader("content-type", "application/json");
+                res.end(JSON.stringify({ source: "yahoo", bars }));
+              } catch (reason) {
+                res.statusCode = 502;
+                res.setHeader("content-type", "application/json");
+                res.end(JSON.stringify({ error: reason instanceof Error ? reason.message : "Grafik alınamadı" }));
+              }
+              return;
+            }
+            if (path !== "/api/bist-quotes") return next();
             try {
               const stocks = await loadLiveQuotes();
               res.setHeader("content-type", "application/json");
