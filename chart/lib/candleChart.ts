@@ -1,5 +1,6 @@
 import type { EChartsCoreOption } from "echarts";
 import { ema, rsi } from "./indicators";
+import type { TradeMark } from "./manualBacktest";
 import type { OhlcBar } from "./parseOhlcv";
 
 const UP = "#ffffff";
@@ -29,7 +30,11 @@ function line(name: string, data: Array<number | null>, color: string, pane = 0)
   };
 }
 
-export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisMin: number; axisMax: number } | null = null): EChartsCoreOption {
+export function candleOption(
+  rows: OhlcBar[],
+  visibleBars = 120,
+  replay: { axisMin: number; axisMax: number; trades?: TradeMark[] } | null = null,
+): EChartsCoreOption {
   const hasVolume = !replay && rows.some((row) => row.volume != null && row.volume > 0);
   const lower = replay ? "rsi" : hasVolume ? "volume" : "none";
   const view = windowPercent(rows.length, visibleBars);
@@ -187,6 +192,32 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisM
         },
         barWidth: replay ? "68%" : undefined,
         barMaxWidth: replay ? undefined : 12,
+        markPoint: replay?.trades?.length
+          ? {
+              silent: true,
+              animation: false,
+              data: replay.trades.flatMap((trade) => {
+                const entry = {
+                  coord: [trade.entryIndex, trade.entryPrice],
+                  symbol: "circle",
+                  symbolSize: 12,
+                  itemStyle: { color: trade.entryBuy ? "#16c47a" : DOWN },
+                  label: { show: false },
+                };
+                if (trade.exitIndex == null || trade.exitPrice == null) return [entry];
+                return [
+                  entry,
+                  {
+                    coord: [trade.exitIndex, trade.exitPrice],
+                    symbol: "circle",
+                    symbolSize: 12,
+                    itemStyle: { color: trade.exitBuy ? "#16c47a" : DOWN },
+                    label: { show: false },
+                  },
+                ];
+              }),
+            }
+          : undefined,
         markLine: last
           ? {
               symbol: "none",
@@ -202,7 +233,25 @@ export function candleOption(rows: OhlcBar[], visibleBars = 120, replay: { axisM
                 padding: [3, 5],
                 borderRadius: 2,
               },
-              data: [{ yAxis: last.close }],
+              data: [
+                { yAxis: last.close },
+                ...(replay?.trades ?? []).flatMap((trade) => [
+                  ...(trade.stop == null
+                    ? []
+                    : [{
+                        yAxis: trade.stop,
+                        lineStyle: { color: DOWN, type: "solid" as const, width: 1 },
+                        label: { show: true, formatter: "Stop", color: DOWN, position: "insideEndTop" as const },
+                      }]),
+                  ...(trade.target == null
+                    ? []
+                    : [{
+                        yAxis: trade.target,
+                        lineStyle: { color: "#16c47a", type: "solid" as const, width: 1 },
+                        label: { show: true, formatter: "Hedef", color: "#16c47a", position: "insideEndBottom" as const },
+                      }]),
+                ]),
+              ],
             }
           : undefined,
       },
