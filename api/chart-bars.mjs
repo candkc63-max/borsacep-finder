@@ -36,28 +36,42 @@ var STOCKS = [
 var SECTORS = Array.from(new Set(STOCKS.map((s) => s.sector))).sort((a, b) => a.localeCompare(b, "tr"));
 
 // chart/lib/chartSearch.ts
-var NAS100_CHOICE = {
+function choice(item) {
+  return item;
+}
+var NAS100_CHOICE = choice({
   id: "nas100-60",
   title: "Nasdaq 100",
   detail: "60 dk \xB7 dosya",
   source: "csv",
-  keywords: "nasdaq nas100"
-};
+  keywords: "nasdaq nas100 endeks",
+  symbol: "NAS100",
+  name: "Nasdaq 100",
+  group: "endeks",
+  interval: "60dk",
+  sector: ""
+});
 var PRESETS = [
-  { id: "xu100-1d", title: "BIST 100", detail: "g\xFCnl\xFCk \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist g\xFCnl\xFCk" },
-  { id: "xu100-1h", title: "BIST 100", detail: "saatlik \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist saatlik" },
-  { id: "xu100-4h", title: "BIST 100", detail: "4 saatlik \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist 4 saat" },
-  { id: "xu100-1wk", title: "BIST 100", detail: "haftal\u0131k \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist haftal\u0131k" },
+  choice({ id: "xu100-1h", title: "BIST 100", detail: "saatlik \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist saatlik 1s", symbol: "XU100", name: "BIST 100", group: "endeks", interval: "1s", sector: "" }),
+  choice({ id: "xu100-4h", title: "BIST 100", detail: "4 saatlik \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist 4 saat 4s", symbol: "XU100", name: "BIST 100", group: "endeks", interval: "4s", sector: "" }),
+  choice({ id: "xu100-1d", title: "BIST 100", detail: "g\xFCnl\xFCk \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist g\xFCnl\xFCk 1g", symbol: "XU100", name: "BIST 100", group: "endeks", interval: "1G", sector: "" }),
+  choice({ id: "xu100-1wk", title: "BIST 100", detail: "haftal\u0131k \xB7 Yahoo", source: "yahoo", keywords: "endeks xu100 bist haftal\u0131k 1h", symbol: "XU100", name: "BIST 100", group: "endeks", interval: "1H", sector: "" }),
   NAS100_CHOICE,
-  { id: "ixic-1d", title: "Nasdaq", detail: "g\xFCnl\xFCk \xB7 Yahoo", source: "yahoo", keywords: "nasdaq ixic endeks g\xFCnl\xFCk" }
+  choice({ id: "ixic-1d", title: "Nasdaq", detail: "g\xFCnl\xFCk \xB7 Yahoo", source: "yahoo", keywords: "nasdaq ixic endeks g\xFCnl\xFCk", symbol: "IXIC", name: "Nasdaq", group: "endeks", interval: "1G", sector: "" })
 ];
-var STOCK_CHOICES = STOCKS.map((stock) => ({
+var STOCK_CHOICES = STOCKS.map((stock) => choice({
   id: `stock-${stock.ticker}`,
   title: stock.ticker,
   detail: `${stock.name} \xB7 g\xFCnl\xFCk \xB7 Yahoo`,
   source: "yahoo",
-  keywords: `${stock.ticker} ${stock.name} hisse`
+  keywords: `${stock.ticker} ${stock.name} ${stock.sector} hisse`,
+  symbol: stock.ticker,
+  name: stock.name,
+  group: "hisse",
+  interval: "1G",
+  sector: stock.sector
 }));
+var ALL = [...PRESETS, ...STOCK_CHOICES];
 function choiceById(id) {
   return [...PRESETS, ...STOCK_CHOICES].find((item) => item.id === id) ?? null;
 }

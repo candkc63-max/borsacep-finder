@@ -30,10 +30,17 @@ function line(name: string, data: Array<number | null>, color: string, pane = 0)
   };
 }
 
+export type ChartOverlay = {
+  fastPeriod: number;
+  slowPeriod: number;
+  marks: TradeMark[];
+};
+
 export function candleOption(
   rows: OhlcBar[],
   visibleBars = 120,
   replay: { axisMin: number; axisMax: number; trades?: TradeMark[] } | null = null,
+  overlay: ChartOverlay | null = null,
 ): EChartsCoreOption {
   const hasVolume = !replay && rows.some((row) => row.volume != null && row.volume > 0);
   const lower = replay ? "rsi" : hasVolume ? "volume" : "none";
@@ -44,6 +51,10 @@ export function candleOption(
   const closes = rows.map((row) => row.close);
   const ema5 = replay ? ema(closes, 5) : [];
   const rsi14 = replay ? rsi(closes, 14) : [];
+  const fastLine = overlay ? ema(closes, overlay.fastPeriod) : [];
+  const slowLine = overlay ? ema(closes, overlay.slowPeriod) : [];
+  const marks = [...(replay?.trades ?? []), ...(overlay?.marks ?? [])];
+  const legendNames = [...(replay ? ["EMA 5", "EMA 8", "EMA 13"] : []), ...(overlay ? [`EMA ${overlay.fastPeriod}`, `EMA ${overlay.slowPeriod}`] : [])];
   const volumes = rows.map((row) => ({
     value: row.volume ?? 0,
     itemStyle: { color: row.close >= row.open ? "rgba(255,255,255,0.8)" : "rgba(225,6,0,0.9)" },
@@ -64,8 +75,8 @@ export function candleOption(
   return {
     backgroundColor: "#000000",
     animation: false,
-    legend: replay
-      ? { show: true, data: ["EMA 5", "EMA 8", "EMA 13"], top: 0, left: 12, textStyle: { color: "#9a9a9a" }, itemHeight: 8 }
+    legend: legendNames.length
+      ? { show: true, data: legendNames, top: 0, left: 12, textStyle: { color: "#9a9a9a" }, itemHeight: 8 }
       : { show: false },
     axisPointer: {
       link: [{ xAxisIndex: "all" }],
@@ -94,19 +105,27 @@ export function candleOption(
           `Kapanış ${price(row.close)}`,
         ];
         if (row.volume != null) lines.push(`Hacim ${Math.round(row.volume).toLocaleString("tr-TR")}`);
-        if (replay && candle?.dataIndex != null) {
-          const emaValue = ema5[candle.dataIndex];
-          const rsiValue = rsi14[candle.dataIndex];
-          if (emaValue != null) lines.push(`EMA 5 ${price(emaValue)}`);
-          if (rsiValue != null) lines.push(`RSI ${rsiValue.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`);
+        if (candle?.dataIndex != null) {
+          if (replay) {
+            const emaValue = ema5[candle.dataIndex];
+            const rsiValue = rsi14[candle.dataIndex];
+            if (emaValue != null) lines.push(`EMA 5 ${price(emaValue)}`);
+            if (rsiValue != null) lines.push(`RSI ${rsiValue.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`);
+          }
+          if (overlay) {
+            const fastValue = fastLine[candle.dataIndex];
+            const slowValue = slowLine[candle.dataIndex];
+            if (fastValue != null) lines.push(`EMA ${overlay.fastPeriod} ${price(fastValue)}`);
+            if (slowValue != null) lines.push(`EMA ${overlay.slowPeriod} ${price(slowValue)}`);
+          }
         }
         return lines.join("<br/>");
       },
     },
     grid: lower === "none"
-      ? [{ left: 16, right: 96, top: 16, bottom: 52 }]
+      ? [{ left: 16, right: 96, top: legendNames.length ? 28 : 16, bottom: 52 }]
       : [
-          { left: 16, right: 96, top: replay ? 28 : 16, height: "62%" },
+          { left: 16, right: 96, top: legendNames.length ? 28 : 16, height: "62%" },
           { left: 16, right: 96, top: "76%", height: "12%" },
         ],
     xAxis: lower === "none" ? [categoryAxis(0, true)] : [categoryAxis(0, true), categoryAxis(1, false)],
@@ -192,29 +211,32 @@ export function candleOption(
         },
         barWidth: replay ? "68%" : undefined,
         barMaxWidth: replay ? undefined : 12,
-        markPoint: replay?.trades?.length
+        markPoint: marks.length
           ? {
               silent: true,
               animation: false,
-              data: replay.trades.flatMap((trade) => {
-                const entry = {
-                  coord: [trade.entryIndex, trade.entryPrice],
+              data: marks.flatMap((trade) => {
+                const pin = (buy: boolean, index: number, value: number) => ({
+                  coord: [index, value],
                   symbol: "circle",
-                  symbolSize: 12,
-                  itemStyle: { color: trade.entryBuy ? "#16c47a" : DOWN },
-                  label: { show: false },
-                };
+                  symbolSize: trade.showPrice ? 9 : 12,
+                  itemStyle: { color: buy ? "#16c47a" : DOWN },
+                  label: trade.showPrice
+                    ? {
+                        show: true,
+                        formatter: `${buy ? "AL" : "SAT"} ${price(value)}`,
+                        color: buy ? "#042014" : "#ffffff",
+                        backgroundColor: buy ? "#16c47a" : DOWN,
+                        fontSize: 10,
+                        padding: [2, 4],
+                        borderRadius: 2,
+                        position: buy ? ("bottom" as const) : ("top" as const),
+                      }
+                    : { show: false },
+                });
+                const entry = pin(trade.entryBuy, trade.entryIndex, trade.entryPrice);
                 if (trade.exitIndex == null || trade.exitPrice == null) return [entry];
-                return [
-                  entry,
-                  {
-                    coord: [trade.exitIndex, trade.exitPrice],
-                    symbol: "circle",
-                    symbolSize: 12,
-                    itemStyle: { color: trade.exitBuy ? "#16c47a" : DOWN },
-                    label: { show: false },
-                  },
-                ];
+                return [entry, pin(trade.exitBuy, trade.exitIndex, trade.exitPrice)];
               }),
             }
           : undefined,
@@ -261,6 +283,12 @@ export function candleOption(
             line("EMA 8", ema(closes, 8), "#c9a227"),
             line("EMA 13", ema(closes, 13), "#7aa2ff"),
             line("RSI", rsi14, "#c9a227", 1),
+          ]
+        : []),
+      ...(overlay
+        ? [
+            line(`EMA ${overlay.fastPeriod}`, fastLine, "#f5c542"),
+            line(`EMA ${overlay.slowPeriod}`, slowLine, "#7aa2ff"),
           ]
         : []),
       ...(lower === "volume"
