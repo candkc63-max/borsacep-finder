@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { backtestRules, describeCondition, type Condition, type Join, type StrategyRules } from "../lib/strategyRules";
+import { backtestRules, describeGroups, type CompareOp, type Condition, type ConditionGroup, type Join, type LineSpec, type Operand, type StrategyRules } from "../lib/strategyRules";
+import { CATEGORIES, filterCatalog, type Category } from "../lib/indicatorCatalog";
 import { loadStrategies, saveStrategies, type SavedStrategy } from "../lib/strategyStore";
 import type { StrategyReport } from "../lib/emaCross";
 import type { OhlcBar } from "../lib/parseOhlcv";
@@ -10,17 +11,14 @@ function newId() {
   return `k-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function blank(kind: Condition["kind"]): Condition {
-  const id = newId();
-  if (kind === "ema-cross") return { id, kind, fast: 20, slow: 50, direction: "up" };
-  if (kind === "price-ema") return { id, kind, period: 200, direction: "above" };
-  if (kind === "rsi-cross") return { id, kind, period: 14, level: 30, direction: "up" };
-  if (kind === "adx-level") return { id, kind, period: 14, level: 25, relation: "above" };
-  return { id, kind: "atr-level", period: 14, level: 1, relation: "above" };
+function stamp(condition: Condition): Condition {
+  return { ...condition, id: condition.id || newId() };
 }
 
 function initial(): SavedStrategy {
   const now = new Date().toISOString();
+  const buy: Condition = { id: "buy-ema", kind: "ema-cross", fast: 20, slow: 50, direction: "up" };
+  const sell: Condition = { id: "sell-ema", kind: "ema-cross", fast: 20, slow: 50, direction: "down" };
   return {
     id: "",
     name: "EMA 20/50",
@@ -29,8 +27,10 @@ function initial(): SavedStrategy {
     direction: "long",
     buyJoin: "and",
     sellJoin: "and",
-    buy: [{ id: "buy-ema", kind: "ema-cross", fast: 20, slow: 50, direction: "up" }],
-    sell: [{ id: "sell-ema", kind: "ema-cross", fast: 20, slow: 50, direction: "down" }],
+    buy: [buy],
+    sell: [sell],
+    buyGroups: [{ id: "buy-1", join: "and", conditions: [buy] }],
+    sellGroups: [{ id: "sell-1", join: "and", conditions: [sell] }],
     capital: 100000,
     allocation: 100,
     fee: 0.05,
@@ -38,73 +38,180 @@ function initial(): SavedStrategy {
   };
 }
 
+function withGroups(item: SavedStrategy): SavedStrategy {
+  if (item.buyGroups?.length && item.sellGroups?.length) return item;
+  return {
+    ...item,
+    buyGroups: item.buyGroups?.length ? item.buyGroups : [{ id: newId(), join: item.buyJoin, conditions: item.buy }],
+    sellGroups: item.sellGroups?.length ? item.sellGroups : [{ id: newId(), join: item.sellJoin, conditions: item.sell }],
+    buyJoin: item.buyGroups?.length ? item.buyJoin : "and",
+    sellJoin: item.sellGroups?.length ? item.sellJoin : "and",
+  };
+}
+
 function numberChange(value: string) {
   return value.trim() === "" ? Number.NaN : Number(value);
 }
 
-function ConditionRow({
-  condition,
-  onChange,
-  onRemove,
-}: {
-  condition: Condition;
-  onChange: (next: Condition) => void;
-  onRemove: () => void;
-}) {
-  function changeKind(kind: Condition["kind"]) {
-    onChange({ ...blank(kind), id: condition.id });
+function numberField(label: string, value: number, onChange: (value: number) => void) {
+  return (
+    <label>{label}<input aria-label={label} value={Number.isFinite(value) ? value : ""} onChange={(event) => onChange(numberChange(event.target.value))} style={{ ...field, width: 72 }} /></label>
+  );
+}
+
+function SpecFields({ spec, onChange }: { spec: LineSpec; onChange: (spec: LineSpec) => void }) {
+  const set = (patch: Partial<LineSpec>) => onChange({ ...spec, ...patch });
+  const period = spec.name !== "macd" && spec.name !== "obv" && spec.name !== "vwap";
+  return (
+    <>
+      {period && numberField("Periyot", spec.period, (value) => set({ period: value }))}
+      {spec.name === "macd" && (
+        <>
+          {numberField("Hızlı", spec.fast, (value) => set({ fast: value }))}
+          {numberField("Yavaş", spec.slow, (value) => set({ slow: value }))}
+          {numberField("Sinyal", spec.signal, (value) => set({ signal: value }))}
+          <select aria-label="MACD çizgisi" value={spec.line} onChange={(event) => set({ line: event.target.value })} style={field}>
+            <option value="macd">MACD</option>
+            <option value="signal">Sinyal</option>
+            <option value="histogram">Histogram</option>
+          </select>
+        </>
+      )}
+      {spec.name === "stoch" && (
+        <>
+          {numberField("Yumuşatma", spec.smooth, (value) => set({ smooth: value }))}
+          <select aria-label="Stochastic çizgisi" value={spec.line} onChange={(event) => set({ line: event.target.value })} style={field}>
+            <option value="k">%K</option>
+            <option value="d">%D</option>
+          </select>
+        </>
+      )}
+      {(spec.name === "bb" || spec.name === "keltner" || spec.name === "supertrend") && numberField("Çarpan", spec.mult, (value) => set({ mult: value }))}
+      {spec.name === "keltner" && numberField("ATR", spec.atrPeriod, (value) => set({ atrPeriod: value }))}
+      {(spec.name === "bb" || spec.name === "keltner" || spec.name === "donchian") && (
+        <select aria-label="Bant çizgisi" value={spec.line} onChange={(event) => set({ line: event.target.value })} style={field}>
+          <option value="upper">Üst</option>
+          <option value="middle">Orta</option>
+          <option value="lower">Alt</option>
+        </select>
+      )}
+    </>
+  );
+}
+
+function OperandFields({ operand, onChange }: { operand: Operand; onChange: (operand: Operand) => void }) {
+  return (
+    <>
+      <select aria-label="Karşılaştırılan değer" value={operand.source === "price" ? operand.field : operand.source} onChange={(event) => {
+        const value = event.target.value;
+        if (value === "constant") onChange({ source: "constant", value: 0 });
+        else if (value === "indicator") onChange({ source: "indicator", spec: { name: "sma", period: 20, fast: 12, slow: 26, signal: 9, mult: 2, atrPeriod: 10, smooth: 3, line: "line" } });
+        else onChange({ source: "price", field: value as "open" | "high" | "low" | "close" });
+      }} style={field}>
+        <option value="close">Kapanış</option>
+        <option value="open">Açılış</option>
+        <option value="high">Yüksek</option>
+        <option value="low">Düşük</option>
+        <option value="constant">Sabit sayı</option>
+        <option value="indicator">Gösterge</option>
+      </select>
+      {operand.source === "constant" && numberField("Sayı", operand.value, (value) => onChange({ source: "constant", value }))}
+      {operand.source === "indicator" && <SpecFields spec={operand.spec} onChange={(spec) => onChange({ source: "indicator", spec })} />}
+    </>
+  );
+}
+
+function ConditionEditor({ condition, onChange, onRemove }: { condition: Condition; onChange: (next: Condition) => void; onRemove: () => void }) {
+  if (condition.kind !== "compare") {
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        <span>{condition.kind === "ema-cross" ? "EMA kesişimi" : condition.kind === "price-ema" ? "Kapanış ve EMA" : condition.kind === "rsi-cross" ? "RSI" : condition.kind === "adx-level" ? "ADX" : "ATR"}</span>
+        {condition.kind === "ema-cross" && (
+          <>
+            {numberField("Hızlı EMA", condition.fast, (fast) => onChange({ ...condition, fast }))}
+            {numberField("Yavaş EMA", condition.slow, (slow) => onChange({ ...condition, slow }))}
+            <select aria-label="Kesişim yönü" value={condition.direction} onChange={(event) => onChange({ ...condition, direction: event.target.value as "up" | "down" })} style={field}>
+              <option value="up">Yukarı keser</option>
+              <option value="down">Aşağı keser</option>
+            </select>
+          </>
+        )}
+        {condition.kind === "price-ema" && (
+          <>
+            {numberField("EMA periyodu", condition.period, (period) => onChange({ ...condition, period }))}
+            <select aria-label="Fiyat EMA ilişkisi" value={condition.direction} onChange={(event) => onChange({ ...condition, direction: event.target.value as "above" | "below" | "cross-up" | "cross-down" })} style={field}>
+              <option value="above">Üzerinde</option>
+              <option value="below">Altında</option>
+              <option value="cross-up">Yukarı keser</option>
+              <option value="cross-down">Aşağı keser</option>
+            </select>
+          </>
+        )}
+        {condition.kind === "rsi-cross" && (
+          <>
+            {numberField("RSI periyodu", condition.period, (period) => onChange({ ...condition, period }))}
+            {numberField("RSI seviyesi", condition.level, (level) => onChange({ ...condition, level }))}
+            <select aria-label="RSI yönü" value={condition.direction} onChange={(event) => onChange({ ...condition, direction: event.target.value as "up" | "down" })} style={field}>
+              <option value="up">Yukarı keser</option>
+              <option value="down">Aşağı keser</option>
+            </select>
+          </>
+        )}
+        {(condition.kind === "adx-level" || condition.kind === "atr-level") && (
+          <>
+            {numberField("Periyot", condition.period, (period) => onChange({ ...condition, period }))}
+            {numberField("Eşik", condition.level, (level) => onChange({ ...condition, level }))}
+            <select aria-label="Eşik ilişkisi" value={condition.relation} onChange={(event) => onChange({ ...condition, relation: event.target.value as "above" | "below" })} style={field}>
+              <option value="above">Üzerinde</option>
+              <option value="below">Altında</option>
+            </select>
+          </>
+        )}
+        <button type="button" onClick={onRemove} style={{ ...field, cursor: "pointer" }}>Sil</button>
+      </div>
+    );
   }
+  const breaking = condition.op.startsWith("break-");
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-      <select aria-label="Koşul türü" value={condition.kind} onChange={(event) => changeKind(event.target.value as Condition["kind"])} style={{ ...field, width: 180 }}>
-        <option value="ema-cross">EMA kesişimi</option>
-        <option value="price-ema">Kapanış ve EMA</option>
-        <option value="rsi-cross">RSI kesişimi</option>
-        <option value="adx-level">ADX eşik</option>
-        <option value="atr-level">ATR eşik</option>
+      <OperandFields operand={condition.left} onChange={(left) => onChange({ ...condition, left })} />
+      <select aria-label="Karşılaştırma" value={condition.op} onChange={(event) => onChange({ ...condition, op: event.target.value as CompareOp })} style={{ ...field, width: 220 }}>
+        <option value="above">Üzerinde</option>
+        <option value="below">Altında</option>
+        <option value="gt">Büyük</option>
+        <option value="lt">Küçük</option>
+        <option value="cross-up">Yukarı kesiyor</option>
+        <option value="cross-down">Aşağı kesiyor</option>
+        <option value="break-prev-high">Önceki mumun yükseğini kırıyor</option>
+        <option value="break-prev-low">Önceki mumun düşüğünü kırıyor</option>
+        <option value="break-highest">Son N mumun yükseğini kırıyor</option>
+        <option value="break-lowest">Son N mumun düşüğünü kırıyor</option>
       </select>
-      {condition.kind === "ema-cross" && (
-        <>
-          <label>Hızlı<input aria-label="Hızlı EMA" value={condition.fast} onChange={(event) => onChange({ ...condition, fast: numberChange(event.target.value) })} style={{ ...field, width: 64 }} /></label>
-          <label>Yavaş<input aria-label="Yavaş EMA" value={condition.slow} onChange={(event) => onChange({ ...condition, slow: numberChange(event.target.value) })} style={{ ...field, width: 64 }} /></label>
-          <select aria-label="Kesişim yönü" value={condition.direction} onChange={(event) => onChange({ ...condition, direction: event.target.value as "up" | "down" })} style={field}>
-            <option value="up">Yukarı keser</option>
-            <option value="down">Aşağı keser</option>
-          </select>
-        </>
-      )}
-      {condition.kind === "price-ema" && (
-        <>
-          <label>Periyot<input aria-label="EMA periyodu" value={condition.period} onChange={(event) => onChange({ ...condition, period: numberChange(event.target.value) })} style={{ ...field, width: 64 }} /></label>
-          <select aria-label="Fiyat EMA ilişkisi" value={condition.direction} onChange={(event) => onChange({ ...condition, direction: event.target.value as "above" | "below" | "cross-up" | "cross-down" })} style={{ ...field, width: 180 }}>
-            <option value="above">Kapanış EMA üzerinde</option>
-            <option value="below">Kapanış EMA altında</option>
-            <option value="cross-up">EMA'yı yukarı keser</option>
-            <option value="cross-down">EMA'yı aşağı keser</option>
-          </select>
-        </>
-      )}
-      {condition.kind === "rsi-cross" && (
-        <>
-          <label>Periyot<input aria-label="RSI periyodu" value={condition.period} onChange={(event) => onChange({ ...condition, period: numberChange(event.target.value) })} style={{ ...field, width: 64 }} /></label>
-          <label>Seviye<input aria-label="RSI seviyesi" value={condition.level} onChange={(event) => onChange({ ...condition, level: numberChange(event.target.value) })} style={{ ...field, width: 64 }} /></label>
-          <select aria-label="RSI yönü" value={condition.direction} onChange={(event) => onChange({ ...condition, direction: event.target.value as "up" | "down" })} style={field}>
-            <option value="up">Yukarı keser</option>
-            <option value="down">Aşağı keser</option>
-          </select>
-        </>
-      )}
-      {(condition.kind === "adx-level" || condition.kind === "atr-level") && (
-        <>
-          <label>Periyot<input aria-label={`${condition.kind === "adx-level" ? "ADX" : "ATR"} periyodu`} value={condition.period} onChange={(event) => onChange({ ...condition, period: numberChange(event.target.value) })} style={{ ...field, width: 64 }} /></label>
-          <label>Eşik<input aria-label={`${condition.kind === "adx-level" ? "ADX" : "ATR"} eşiği`} value={condition.level} onChange={(event) => onChange({ ...condition, level: numberChange(event.target.value) })} style={{ ...field, width: 64 }} /></label>
-          <select aria-label="Eşik ilişkisi" value={condition.relation} onChange={(event) => onChange({ ...condition, relation: event.target.value as "above" | "below" })} style={field}>
-            <option value="above">Üzerinde</option>
-            <option value="below">Altında</option>
-          </select>
-        </>
-      )}
+      {!breaking && <OperandFields operand={condition.right} onChange={(right) => onChange({ ...condition, right })} />}
+      {(condition.op === "break-highest" || condition.op === "break-lowest") && numberField("N mum", condition.length, (length) => onChange({ ...condition, length }))}
       <button type="button" onClick={onRemove} style={{ ...field, cursor: "pointer" }}>Sil</button>
+    </div>
+  );
+}
+
+function CatalogPicker({ onPick, onClose }: { onPick: (condition: Condition) => void; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<Category | "Tümü">("Tümü");
+  const entries = filterCatalog(query, category);
+  return (
+    <div data-testid="indicator-catalog" style={{ display: "flex", flexDirection: "column", gap: 6, border: "1px solid #2c2c2c", borderRadius: 8, padding: 8 }}>
+      <input data-testid="indicator-search" aria-label="Gösterge ara" placeholder="Gösterge ara" value={query} onChange={(event) => setQuery(event.target.value)} style={{ ...field, width: 220 }} />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {(["Tümü", ...CATEGORIES] as const).map((item) => (
+          <button key={item} type="button" onClick={() => setCategory(item)} style={{ ...field, cursor: "pointer", background: category === item ? "#f2f2f2" : "#111", color: category === item ? "#111" : "#f2f2f2" }}>{item}</button>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 6, width: "100%" }}>
+        {entries.map((entry) => (
+          <button key={entry.id} type="button" onClick={() => { onPick(stamp(entry.create())); onClose(); }} style={{ ...field, cursor: "pointer" }}>{entry.label}</button>
+        ))}
+        {entries.length === 0 && <span style={{ color: "#9a9a9a" }}>Eşleşen gösterge yok.</span>}
+      </div>
     </div>
   );
 }
@@ -121,6 +228,7 @@ export function StrategyBuilder({
   const [draft, setDraft] = useState<SavedStrategy>(initial);
   const [saved, setSaved] = useState<SavedStrategy[]>([]);
   const [formError, setFormError] = useState("");
+  const [picker, setPicker] = useState<{ side: "buy" | "sell"; index: number } | null>(null);
 
   useEffect(() => {
     setSaved(loadStrategies(window.localStorage));
@@ -131,24 +239,29 @@ export function StrategyBuilder({
     saveStrategies(window.localStorage, list);
   }
 
-  function updateBuy(index: number, condition: Condition) {
-    setDraft({ ...draft, buy: draft.buy.map((item, itemIndex) => itemIndex === index ? condition : item) });
+  function groupsOf(side: "buy" | "sell") {
+    return side === "buy" ? draft.buyGroups ?? [] : draft.sellGroups ?? [];
   }
-  function updateSell(index: number, condition: Condition) {
-    setDraft({ ...draft, sell: draft.sell.map((item, itemIndex) => itemIndex === index ? condition : item) });
+
+  function setGroups(side: "buy" | "sell", groups: ConditionGroup[]) {
+    const flat = groups.flatMap((group) => group.conditions);
+    setDraft(side === "buy" ? { ...draft, buyGroups: groups, buy: flat } : { ...draft, sellGroups: groups, sell: flat });
   }
 
   function rules(): StrategyRules {
+    const current = withGroups(draft);
     return {
-      name: draft.name.trim() || "Adsız strateji",
-      capital: draft.capital,
-      allocation: draft.allocation / 100,
-      feeRate: draft.fee / 100,
-      slippageRate: draft.slippage / 100,
-      buyJoin: draft.buyJoin,
-      sellJoin: draft.sellJoin,
-      buy: draft.buy,
-      sell: draft.sell,
+      name: current.name.trim() || "Adsız strateji",
+      capital: current.capital,
+      allocation: current.allocation / 100,
+      feeRate: current.fee / 100,
+      slippageRate: current.slippage / 100,
+      buyJoin: current.buyJoin,
+      sellJoin: current.sellJoin,
+      buy: current.buyGroups?.flatMap((group) => group.conditions) ?? current.buy,
+      sell: current.sellGroups?.flatMap((group) => group.conditions) ?? current.sell,
+      buyGroups: current.buyGroups,
+      sellGroups: current.sellGroups,
     };
   }
 
@@ -173,7 +286,8 @@ export function StrategyBuilder({
       return;
     }
     const now = new Date().toISOString();
-    const record: SavedStrategy = { ...draft, name, direction: "long", updatedAt: now, createdAt: draft.id ? draft.createdAt : now, id: draft.id || newId() };
+    const current = withGroups({ ...draft, name });
+    const record: SavedStrategy = { ...current, direction: "long", updatedAt: now, createdAt: current.id ? current.createdAt : now, id: current.id || newId() };
     const list = saved.some((item) => item.id === record.id)
       ? saved.map((item) => item.id === record.id ? record : item)
       : [record, ...saved];
@@ -184,23 +298,67 @@ export function StrategyBuilder({
 
   function copy(item: SavedStrategy) {
     const now = new Date().toISOString();
+    const source = withGroups(item);
     const record: SavedStrategy = {
-      ...item,
+      ...source,
       id: newId(),
       name: `${item.name} kopya`,
       createdAt: now,
       updatedAt: now,
-      buy: item.buy.map((condition) => ({ ...condition, id: newId() })),
-      sell: item.sell.map((condition) => ({ ...condition, id: newId() })),
+      buyGroups: source.buyGroups?.map((group) => ({ ...group, id: newId(), conditions: group.conditions.map((condition) => ({ ...condition, id: newId() })) })),
+      sellGroups: source.sellGroups?.map((group) => ({ ...group, id: newId(), conditions: group.conditions.map((condition) => ({ ...condition, id: newId() })) })),
     };
+    record.buy = record.buyGroups?.flatMap((group) => group.conditions) ?? [];
+    record.sell = record.sellGroups?.flatMap((group) => group.conditions) ?? [];
     persist([record, ...saved]);
     setDraft(record);
   }
 
+  function renderSide(side: "buy" | "sell", title: string, color: string) {
+    const groups = groupsOf(side);
+    const outer = side === "buy" ? draft.buyJoin : draft.sellJoin;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <strong style={{ color }}>{title}</strong>
+          <select data-testid={side === "buy" ? "buy-join" : "sell-join"} aria-label={side === "buy" ? "AL grupları arası" : "SAT grupları arası"} value={outer} onChange={(event) => setDraft({ ...draft, [side === "buy" ? "buyJoin" : "sellJoin"]: event.target.value as Join })} style={field}>
+            <option value="and">Gruplar arası VE</option>
+            <option value="or">Gruplar arası VEYA</option>
+          </select>
+          <button type="button" onClick={() => setGroups(side, [...groups, { id: newId(), join: "and", conditions: [] }])} style={{ ...field, cursor: "pointer" }}>Grup ekle</button>
+        </div>
+        {groups.map((group, groupIndex) => (
+          <div key={group.id} style={{ display: "flex", flexDirection: "column", gap: 6, border: "1px solid #2c2c2c", borderRadius: 8, padding: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              <span>Grup {groupIndex + 1}</span>
+              <select aria-label={`Grup ${groupIndex + 1} içi`} value={group.join} onChange={(event) => setGroups(side, groups.map((item, index) => index === groupIndex ? { ...item, join: event.target.value as Join } : item))} style={field}>
+                <option value="and">Grup içi VE</option>
+                <option value="or">Grup içi VEYA</option>
+              </select>
+              <button type="button" onClick={() => setPicker({ side, index: groupIndex })} style={{ ...field, cursor: "pointer" }}>Koşul ekle</button>
+              <button type="button" disabled={groupIndex === 0} onClick={() => {
+                const next = groups.slice();
+                [next[groupIndex - 1], next[groupIndex]] = [next[groupIndex], next[groupIndex - 1]];
+                setGroups(side, next);
+              }} style={{ ...field, cursor: "pointer" }}>Yukarı</button>
+              {groups.length > 1 && <button type="button" onClick={() => setGroups(side, groups.filter((_, index) => index !== groupIndex))} style={{ ...field, cursor: "pointer" }}>Grubu sil</button>}
+            </div>
+            {picker?.side === side && picker.index === groupIndex && (
+              <CatalogPicker onClose={() => setPicker(null)} onPick={(condition) => setGroups(side, groups.map((item, index) => index === groupIndex ? { ...item, conditions: [...item.conditions, condition] } : item))} />
+            )}
+            {group.conditions.map((condition, conditionIndex) => (
+              <ConditionEditor key={condition.id} condition={condition} onChange={(next) => setGroups(side, groups.map((item, index) => index === groupIndex ? { ...item, conditions: item.conditions.map((row, rowIndex) => rowIndex === conditionIndex ? next : row) } : item))} onRemove={() => setGroups(side, groups.map((item, index) => index === groupIndex ? { ...item, conditions: item.conditions.filter((_, rowIndex) => rowIndex !== conditionIndex) } : item))} />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="strategy-builder" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="strategy-builder" style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, maxWidth: "100%" }}>
       <p style={{ margin: 0, color: "#9a9a9a" }}>
-        EMA kapanıştan üsteldir. RSI, ADX ve ATR Wilder yöntemidir. Sinyal kapanmış mumda oluşur, emir sonraki açılışta dolar. Kayıtlar yalnızca bu tarayıcıda tutulur.
+        EMA kapanıştan üsteldir. RSI, ADX ve ATR Wilder yöntemidir. SMA, WMA ve HMA kapanıştandır. VWAP serinin başından birikir, seans sıfırlaması yoktur. Sinyal kapanmış mumda oluşur, emir sonraki açılışta dolar. Bölünme ve temettü düzeltmesi veri kaynağının notuna bağlıdır. Kayıtlar yalnızca bu tarayıcıda tutulur.
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
         <label>Strateji adı<input data-testid="strategy-name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} style={{ ...field, width: 180 }} /></label>
@@ -210,28 +368,12 @@ export function StrategyBuilder({
         <label>Komisyon %<input aria-label="Strateji komisyonu" value={draft.fee} onChange={(event) => setDraft({ ...draft, fee: numberChange(event.target.value) })} style={{ ...field, width: 72 }} /></label>
         <label>Kayma %<input aria-label="Strateji kayması" value={draft.slippage} onChange={(event) => setDraft({ ...draft, slippage: numberChange(event.target.value) })} style={{ ...field, width: 72 }} /></label>
       </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <strong style={{ color: "#16c47a" }}>AL koşulları</strong>
-        <select data-testid="buy-join" aria-label="AL birleştirme" value={draft.buyJoin} onChange={(event) => setDraft({ ...draft, buyJoin: event.target.value as Join })} style={field}>
-          <option value="and">VE</option>
-          <option value="or">VEYA</option>
-        </select>
-        <button type="button" onClick={() => setDraft({ ...draft, buy: [...draft.buy, blank("price-ema")] })} style={{ ...field, cursor: "pointer" }}>Koşul ekle</button>
-      </div>
-      {draft.buy.map((condition, index) => (
-        <ConditionRow key={condition.id} condition={condition} onChange={(next) => updateBuy(index, next)} onRemove={() => setDraft({ ...draft, buy: draft.buy.filter((_, itemIndex) => itemIndex !== index) })} />
-      ))}
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <strong style={{ color: "#e10600" }}>SAT koşulları</strong>
-        <select data-testid="sell-join" aria-label="SAT birleştirme" value={draft.sellJoin} onChange={(event) => setDraft({ ...draft, sellJoin: event.target.value as Join })} style={field}>
-          <option value="and">VE</option>
-          <option value="or">VEYA</option>
-        </select>
-        <button type="button" onClick={() => setDraft({ ...draft, sell: [...draft.sell, blank("ema-cross")] })} style={{ ...field, cursor: "pointer" }}>Koşul ekle</button>
-      </div>
-      {draft.sell.map((condition, index) => (
-        <ConditionRow key={condition.id} condition={condition} onChange={(next) => updateSell(index, next)} onRemove={() => setDraft({ ...draft, sell: draft.sell.filter((_, itemIndex) => itemIndex !== index) })} />
-      ))}
+      {renderSide("buy", "AL koşulları", "#16c47a")}
+      {renderSide("sell", "SAT koşulları", "#e10600")}
+      <section data-testid="risk-placeholder" style={{ border: "1px dashed #3a3a3a", borderRadius: 8, padding: 8, color: "#9a9a9a" }}>
+        <strong style={{ color: "#f2f2f2" }}>Risk yönetimi</strong>
+        <p style={{ margin: "4px 0 0" }}>Stop, hedef, trailing stop, kademeli giriş ve çıkış henüz uygulanmıyor. Bu test onları kullanmaz.</p>
+      </section>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button type="button" data-testid="strategy-run-rules" onClick={run} disabled={!rows?.length} style={{ minHeight: 32, padding: "0 12px", borderRadius: 8, border: "1px solid #f2f2f2", background: "#f2f2f2", color: "#111", cursor: "pointer" }}>Testi Başlat</button>
         <button type="button" data-testid="strategy-save" onClick={save} style={{ ...field, cursor: "pointer" }}>Kaydet</button>
@@ -242,8 +384,8 @@ export function StrategyBuilder({
         {saved.map((item) => (
           <div key={item.id} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", border: "1px solid #2c2c2c", borderRadius: 8, padding: "6px 8px" }}>
             <span style={{ minWidth: 140 }}>{item.name}</span>
-            <span style={{ color: "#8d8d8d" }}>{item.buy.map(describeCondition).join(item.buyJoin === "and" ? " VE " : " VEYA ") || "AL yok"}</span>
-            <button type="button" onClick={() => setDraft(item)} style={{ ...field, cursor: "pointer" }}>Aç</button>
+            <span style={{ color: "#8d8d8d" }}>{describeGroups(item.buyGroups, item.buy, item.buyGroups?.length ? item.buyJoin : item.buyJoin)}</span>
+            <button type="button" onClick={() => setDraft(withGroups(item))} style={{ ...field, cursor: "pointer" }}>Aç</button>
             <button type="button" onClick={() => copy(item)} style={{ ...field, cursor: "pointer" }}>Kopyala</button>
             <button type="button" onClick={() => {
               persist(saved.filter((row) => row.id !== item.id));
