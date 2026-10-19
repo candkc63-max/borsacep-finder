@@ -206,7 +206,7 @@ function CatalogPicker({ onPick, onClose }: { onPick: (condition: Condition) => 
           <button key={item} type="button" onClick={() => setCategory(item)} style={{ ...field, cursor: "pointer", background: category === item ? "#f2f2f2" : "#111", color: category === item ? "#111" : "#f2f2f2" }}>{item}</button>
         ))}
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 6, width: "100%" }}>
         {entries.map((entry) => (
           <button key={entry.id} type="button" onClick={() => { onPick(stamp(entry.create())); onClose(); }} style={{ ...field, cursor: "pointer" }}>{entry.label}</button>
         ))}
@@ -356,7 +356,7 @@ export function StrategyBuilder({
   }
 
   return (
-    <div data-testid="strategy-builder" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="strategy-builder" style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, maxWidth: "100%" }}>
       <p style={{ margin: 0, color: "#9a9a9a" }}>
         EMA kapanıştan üsteldir. RSI, ADX ve ATR Wilder yöntemidir. SMA, WMA ve HMA kapanıştandır. VWAP serinin başından birikir, seans sıfırlaması yoktur. Sinyal kapanmış mumda oluşur, emir sonraki açılışta dolar. Bölünme ve temettü düzeltmesi veri kaynağının notuna bağlıdır. Kayıtlar yalnızca bu tarayıcıda tutulur.
       </p>
