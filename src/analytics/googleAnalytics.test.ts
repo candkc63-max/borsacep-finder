@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GA_MEASUREMENT_ID,
@@ -82,7 +83,7 @@ describe("spa page views", () => {
 
 describe("google tag snippet", () => {
   it("installs the measurement id once and leaves the first page view to the app", () => {
-    const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+    const html = readFileSync(path.join(process.cwd(), "index.html"), "utf8");
     const scriptSources = html.match(/googletagmanager\.com\/gtag\/js\?id=G-[A-Z0-9]+/g) ?? [];
 
     expect(scriptSources).toEqual([`googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`]);
