@@ -29,8 +29,8 @@ function labelOf(time: string) {
   return `${match[3]}.${match[2]} ${match[4]}:${match[5]}`;
 }
 
-export function barsFromYahoo(body: YahooChart): OhlcBar[] {
-  const result = body.chart?.result?.[0];
+export function barsFromYahoo(body: unknown): OhlcBar[] {
+  const result = (body as YahooChart).chart?.result?.[0];
   const times = result?.timestamp ?? [];
   const quote = result?.indicators?.quote?.[0];
   if (!quote) return [];

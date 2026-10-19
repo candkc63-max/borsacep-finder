@@ -44,6 +44,7 @@ export type TradeMark = {
   exitBuy: boolean;
   stop: number | null;
   target: number | null;
+  showPrice?: boolean;
 };
 
 export type BacktestSnapshot = {
@@ -81,15 +82,15 @@ export function openNet(direction: Side, entry: number, mark: number, size: numb
 }
 
 export function validateManualOrder(order: Pick<ManualOrder, "direction" | "entry" | "size" | "stop" | "target">, bar: PriceBar): string | null {
-  if (![order.entry, order.size, order.stop, order.target].every(Number.isFinite)) return "Sayılar geçersiz.";
-  if (order.size <= 0) return "Miktar sıfırdan büyük olmalı.";
-  if (order.entry < bar.low || order.entry > bar.high) return "Giriş fiyatı bu mumun içinde olmalı.";
-  if (order.direction === "long" && !(order.stop < order.entry && order.entry < order.target)) {
-    return "Long için stop girişin altında, hedef üstünde olmalı.";
-  }
-  if (order.direction === "short" && !(order.target < order.entry && order.entry < order.stop)) {
-    return "Short için hedef girişin altında, stop üstünde olmalı.";
-  }
+  if (!Number.isFinite(order.entry)) return "Giriş fiyatı sayı olmalı.";
+  if (!Number.isFinite(order.size) || order.size <= 0) return "Pozisyon büyüklüğü sıfırdan büyük olmalı.";
+  if (!Number.isFinite(order.stop)) return "Stop Loss sayı olmalı.";
+  if (!Number.isFinite(order.target)) return "Take Profit sayı olmalı.";
+  if (order.entry < bar.low || order.entry > bar.high) return "Giriş fiyatı bu mumun en düşük ve en yüksek değeri arasında olmalı.";
+  if (order.direction === "long" && !(order.stop < order.entry)) return "Long için Stop Loss, giriş fiyatının altında olmalı.";
+  if (order.direction === "long" && !(order.entry < order.target)) return "Long için Take Profit, giriş fiyatının üstünde olmalı.";
+  if (order.direction === "short" && !(order.entry < order.stop)) return "Short için Stop Loss, giriş fiyatının üstünde olmalı.";
+  if (order.direction === "short" && !(order.target < order.entry)) return "Short için Take Profit, giriş fiyatının altında olmalı.";
   return null;
 }
 

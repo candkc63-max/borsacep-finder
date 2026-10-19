@@ -148,10 +148,32 @@ describe("manual backtest", () => {
     expect(mixed.realized).toBe(5);
   });
 
+  it("keeps capital, commission and size consistent for long and short", () => {
+    const longBars: PriceBar[] = [flat(100), { open: 100, high: 110, low: 95, close: 108 }];
+    const long = simulateManual([order({ direction: "long", entry: 100, stop: 90, target: 110, size: 2 })], longBars, 1, rate, capital);
+    expect(long.closed[0].reason).toBe("target");
+    expect(long.closed[0].net).toBeCloseTo(tradeNet("long", 100, 110, 2, rate));
+    expect(long.equity).toBeCloseTo(capital + (long.closed[0].net ?? 0));
+    expect(long.realized).toBeCloseTo(long.closed[0].net ?? 0);
+    expect(long.unrealized).toBe(0);
+
+    const shortBars: PriceBar[] = [flat(100), { open: 100, high: 110, low: 95, close: 108 }];
+    const short = simulateManual([order({ id: "s", direction: "short", entry: 100, stop: 110, target: 90, size: 3 })], shortBars, 1, rate, capital);
+    expect(short.closed[0].reason).toBe("stop");
+    expect(short.closed[0].net).toBeCloseTo(tradeNet("short", 100, 110, 3, rate));
+    expect(short.equity).toBeCloseTo(capital + (short.closed[0].net ?? 0));
+    expect(short.realized).toBeCloseTo(short.equity - capital);
+  });
+
   it("rejects an entry outside the current candle", () => {
     const bar = { open: 100, high: 105, low: 99, close: 104 };
-    expect(validateManualOrder({ direction: "long", entry: 110, size: 1, stop: 90, target: 120 }, bar)).toMatch(/mumun içinde/);
-    expect(validateManualOrder({ direction: "short", entry: 104, size: 1, stop: 100, target: 90 }, bar)).toMatch(/stop/);
-    expect(validateManualOrder({ direction: "long", entry: 104, size: 1, stop: 100, target: 110 }, bar)).toBeNull();
+    expect(validateManualOrder({ direction: "long", entry: 110, size: 1, stop: 90, target: 120 }, bar)).toMatch(/en düşük/);
+    expect(validateManualOrder({ direction: "short", entry: 104, size: 1, stop: 100, target: 90 }, bar)).toMatch(/Stop Loss/);
+    expect(validateManualOrder({ direction: "long", entry: 104, size: 1, stop: 106, target: 110 }, bar)).toMatch(/Stop Loss/);
+    expect(validateManualOrder({ direction: "long", entry: 104, size: 1, stop: 90, target: 100 }, bar)).toMatch(/Take Profit/);
+    expect(validateManualOrder({ direction: "short", entry: 104, size: 1, stop: 110, target: 106 }, bar)).toMatch(/Take Profit/);
+    expect(validateManualOrder({ direction: "long", entry: Number.NaN, size: 1, stop: 90, target: 120 }, bar)).toMatch(/Giriş/);
+    expect(validateManualOrder({ direction: "long", entry: 104, size: 1, stop: Number.NaN, target: 120 }, bar)).toMatch(/Stop Loss sayı/);
+    expect(validateManualOrder({ direction: "long", entry: 104, size: 1, stop: 90, target: 110 }, bar)).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchCharts } from "../../chart/lib/chartSearch";
+import { choiceIntervals, searchCharts } from "../../chart/lib/chartSearch";
 import { barsFromYahoo, groupFourHours } from "../../chart/lib/yahooBars";
 
 describe("chart search", () => {
@@ -14,6 +14,19 @@ describe("chart search", () => {
     expect(searchCharts("thyao").some((item) => item.id === "stock-THYAO")).toBe(true);
     expect(searchCharts("endeks günlük").some((item) => item.id === "xu100-1d")).toBe(true);
     expect(searchCharts("nasdaq").some((item) => item.id === "nas100-60")).toBe(true);
+  });
+
+  it("ranks the ticker first and ignores Turkish diacritics", () => {
+    expect(searchCharts("akbnk")[0]?.id).toBe("stock-AKBNK");
+    expect(searchCharts("akbank")[0]?.id).toBe("stock-AKBNK");
+    expect(searchCharts("sisecam")[0]?.id).toBe("stock-SISE");
+    expect(searchCharts("is bankasi")[0]?.id).toBe("stock-ISCTR");
+    expect(searchCharts("bankacilik").every((item) => item.sector === "Bankacılık")).toBe(true);
+  });
+
+  it("lists BIST intervals in clock order", () => {
+    expect(choiceIntervals("xu100-1d").map((item) => item.interval)).toEqual(["1s", "4s", "1G", "1H"]);
+    expect(choiceIntervals("stock-THYAO")).toEqual([]);
   });
 
   it("reads yahoo candles and groups four hours without future bars", () => {
