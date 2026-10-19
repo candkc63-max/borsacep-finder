@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import * as echarts from "echarts";
-import { candleOption, windowPercent } from "../lib/candleChart";
+import { candleOption, windowPercent, type ChartOverlay } from "../lib/candleChart";
 import { replayDelay, replayFocus, replaySlice, stepCursor } from "../lib/indicators";
 import { NAS100_CHOICE, type ChartChoice } from "../lib/chartSearch";
 import { SymbolSearch } from "./SymbolSearch";
 import { simulateManual, validateManualOrder, type ManualOrder, type Side } from "../lib/manualBacktest";
 import { parseOhlcvCsv, type OhlcBar } from "../lib/parseOhlcv";
 import { parseJsonResponse } from "../lib/readJson";
+import { priceSeriesNote, projectStrategy, strategyMarks, type StrategyReport } from "../lib/emaCross";
+import { StrategyPanel } from "./StrategyPanel";
 
 const RANGES = [
   { label: "2 gün", bars: 48 },
@@ -92,7 +94,8 @@ export function CandlestickChart() {
   const [formError, setFormError] = useState("");
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelHeight, setPanelHeight] = useState(188);
-  const [dock, setDock] = useState<"islem" | "gecmis" | "replay">("islem");
+  const [dock, setDock] = useState<"islem" | "gecmis" | "replay" | "strateji">("islem");
+  const [strategy, setStrategy] = useState<StrategyReport | null>(null);
   const orderId = useRef(1);
   replayRef.current = replay;
 
@@ -100,6 +103,7 @@ export function CandlestickChart() {
     let cancel = false;
     setReplay(null);
     setOrders([]);
+    setStrategy(null);
     setFormError("");
     setError("");
     const load = choice.source === "csv"
@@ -224,6 +228,15 @@ export function CandlestickChart() {
     if (!replay || !rows?.length || !Number.isFinite(capital)) return null;
     return simulateManual(orders, rows, replay.cursor, rate, capital);
   }, [replay, rows, orders, capital, rate]);
+  const strategyView = useMemo(() => {
+    if (!strategy || !rows?.length) return null;
+    return replay ? projectStrategy(strategy, rows, replay.cursor) : strategy;
+  }, [strategy, rows, replay]);
+  const strategyOverlay = useMemo<ChartOverlay | null>(() => (
+    strategyView?.ok
+      ? { fastPeriod: strategyView.spec.fast, slowPeriod: strategyView.spec.slow, marks: strategyMarks(strategyView.trades) }
+      : null
+  ), [strategyView]);
 
   useEffect(() => {
     if (!replay || !rows?.[replay.cursor]) return;
@@ -238,7 +251,7 @@ export function CandlestickChart() {
     const frozen = !replay.following ? userWindowRef.current : null;
     const axisMin = frozen ? Math.min(frozen.start, focus.startValue, 0) : focus.axisMin;
     const axisMax = frozen ? Math.max(frozen.end, replay.cursor) : focus.axisMax;
-    const option = candleOption(prefix, 120, { axisMin, axisMax, trades: book?.marks ?? [] });
+    const option = candleOption(prefix, 120, { axisMin, axisMax, trades: book?.marks ?? [] }, strategyOverlay);
     delete option.dataZoom;
     const window = frozen ?? { start: focus.startValue, end: focus.endValue };
     applyingZoom.current = true;
@@ -248,7 +261,7 @@ export function CandlestickChart() {
     chart.dispatchAction({ type: "dataZoom", startValue: window.start, endValue: window.end });
     applyingZoom.current = false;
     setActive(prefix[prefix.length - 1] ?? null);
-  }, [replay, rows, book]);
+  }, [replay, rows, book, strategyOverlay]);
 
   useEffect(() => {
     if (!replay?.playing || !rows?.length) return undefined;
@@ -287,12 +300,19 @@ export function CandlestickChart() {
     chartRef.current.dispatchAction({ type: "dataZoom", start, end: 100 });
   }
 
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !rows?.length || replay) return;
+    chart.setOption(candleOption(rows, range, null, strategyOverlay), { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend"] });
+  }, [strategyOverlay, rows, replay, range]);
+
   function exitReplay() {
     setReplay(null);
     setOrders([]);
     setFormError("");
     if (rows?.length && chartRef.current) {
-      chartRef.current.setOption(candleOption(rows, 120), { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend", "dataZoom"] });
+      const overlay = strategy?.ok ? { fastPeriod: strategy.spec.fast, slowPeriod: strategy.spec.slow, marks: strategyMarks(strategy.trades) } : null;
+      chartRef.current.setOption(candleOption(rows, 120, null, overlay), { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend", "dataZoom"] });
       setActive(rows[rows.length - 1] ?? null);
     }
   }
@@ -400,6 +420,7 @@ export function CandlestickChart() {
           <section data-testid="term-dock" style={{ height: panelHeight, minHeight: 0, display: "flex", flexDirection: "column", background: "#0c0c0c", borderTop: "1px solid #2c2c2c", color: "#f2f2f2", font: "12px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 2, borderBottom: "1px solid #2c2c2c", overflowX: "auto" }}>
               {([
+                ["strateji", "Strateji"],
                 ["islem", "İşlem"],
                 ["gecmis", "Geçmiş"],
                 ["replay", "Replay"],
@@ -453,6 +474,21 @@ export function CandlestickChart() {
                     </button>
                   ))}
                 </div>
+              )}
+              {dock === "strateji" && (
+                <StrategyPanel
+                  rows={rows}
+                  adjustment={priceSeriesNote(choice.source)}
+                  view={strategyView}
+                  replayOn={!!replay}
+                  onReport={(report) => {
+                    setStrategy(report);
+                    setPanelOpen(true);
+                  }}
+                  onFocus={(index) => {
+                    setReplay({ cursor: index, start: index, playing: false, speed: replay?.speed ?? 1, following: true });
+                  }}
+                />
               )}
               {dock === "replay" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
