@@ -1,4 +1,5 @@
 import type { CompareOp, Condition, ConditionGroup, Join, LineSpec, Operand } from "./strategyRules";
+import { defaultRiskDraft, type RiskDraft, type SizeKind, type StopKind, type TargetKind, type TrailKind } from "./riskPlan";
 
 export const STRATEGY_STORAGE_KEY = "borsa101-strategies";
 
@@ -18,6 +19,7 @@ export type SavedStrategy = {
   allocation: number;
   fee: number;
   slippage: number;
+  risk?: RiskDraft;
 };
 
 type Memory = {
@@ -115,6 +117,7 @@ function saved(value: unknown): SavedStrategy | null {
   const buyGroups = parseGroups(row.buyGroups);
   const sellGroups = parseGroups(row.sellGroups);
   if (buyGroups === null || sellGroups === null) return null;
+  const risk = parseRisk(row.risk);
   return {
     id: row.id,
     name: row.name,
@@ -131,6 +134,46 @@ function saved(value: unknown): SavedStrategy | null {
     allocation: row.allocation,
     fee: row.fee,
     slippage: row.slippage,
+    ...(risk ? { risk } : {}),
+  };
+}
+
+function parseRisk(value: unknown): RiskDraft | undefined {
+  if (value == null) return undefined;
+  if (!value || typeof value !== "object") return undefined;
+  const row = value as Record<string, unknown>;
+  const base = defaultRiskDraft();
+  const stop = row.stop;
+  const target = row.target;
+  const trail = row.trail;
+  const size = row.size;
+  if (typeof stop !== "string" || typeof target !== "string" || typeof trail !== "string" || typeof size !== "string") return undefined;
+  const stops = new Set(["none", "percent", "price", "atr", "swing"]);
+  const targets = new Set(["none", "percent", "price", "rr"]);
+  const trails = new Set(["off", "percent", "atr"]);
+  const sizes = new Set(["shares", "equity", "risk"]);
+  if (!stops.has(stop) || !targets.has(target) || !trails.has(trail) || !sizes.has(size)) return undefined;
+  const numbers = ["stopPercent", "stopPrice", "atrPeriod", "atrMult", "swingBars", "targetPercent", "targetPrice", "rewardMultiple", "trailPercent", "trailAtrPeriod", "trailAtrMult", "shares", "riskPercent"] as const;
+  if (numbers.some((key) => typeof row[key] !== "number" || !Number.isFinite(row[key] as number))) return undefined;
+  return {
+    ...base,
+    stop: stop as StopKind,
+    target: target as TargetKind,
+    trail: trail as TrailKind,
+    size: size as SizeKind,
+    stopPercent: row.stopPercent as number,
+    stopPrice: row.stopPrice as number,
+    atrPeriod: row.atrPeriod as number,
+    atrMult: row.atrMult as number,
+    swingBars: row.swingBars as number,
+    targetPercent: row.targetPercent as number,
+    targetPrice: row.targetPrice as number,
+    rewardMultiple: row.rewardMultiple as number,
+    trailPercent: row.trailPercent as number,
+    trailAtrPeriod: row.trailAtrPeriod as number,
+    trailAtrMult: row.trailAtrMult as number,
+    shares: row.shares as number,
+    riskPercent: row.riskPercent as number,
   };
 }
 

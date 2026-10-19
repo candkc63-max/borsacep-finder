@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { backtestRules, describeGroups, type CompareOp, type Condition, type ConditionGroup, type Join, type LineSpec, type Operand, type StrategyRules } from "../lib/strategyRules";
 import { CATEGORIES, filterCatalog, type Category } from "../lib/indicatorCatalog";
+import { defaultRiskDraft, settingsFromDraft, type RiskDraft } from "../lib/riskPlan";
 import { loadStrategies, saveStrategies, type SavedStrategy } from "../lib/strategyStore";
 import type { StrategyReport } from "../lib/emaCross";
 import type { OhlcBar } from "../lib/parseOhlcv";
@@ -216,6 +217,102 @@ function CatalogPicker({ onPick, onClose }: { onPick: (condition: Condition) => 
   );
 }
 
+function RiskSection({ risk, onChange }: { risk: RiskDraft; onChange: (risk: RiskDraft) => void }) {
+  const set = (patch: Partial<RiskDraft>) => {
+    const next = { ...risk, ...patch };
+    if (next.stop === "none" && next.target === "rr") next.target = "none";
+    if (next.stop === "none" && next.size === "risk") next.size = "equity";
+    onChange(next);
+  };
+  const stopOff = risk.stop === "none";
+  return (
+    <details data-testid="risk-panel" style={{ border: "1px solid #2c2c2c", borderRadius: 8, padding: "6px 8px" }}>
+      <summary style={{ cursor: "pointer", color: "#f2f2f2" }}>Risk yönetimi</summary>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+        <p style={{ margin: 0, color: "#9a9a9a" }}>Stop ve hedef, girişten sonraki mumlarda yüksek ve düşük ile kontrol edilir. Aynı mumda ikisi birden görülürse stop önce kabul edilir. Açılış stopun ötesindeyse satış açılış fiyatındadır.</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
+          <label>Stop Loss
+            <select data-testid="risk-stop" aria-label="Stop Loss" value={risk.stop} onChange={(event) => set({ stop: event.target.value as RiskDraft["stop"] })} style={field}>
+              <option value="none">Stop yok</option>
+              <option value="percent">Sabit yüzde</option>
+              <option value="price">Sabit fiyat</option>
+              <option value="atr">ATR çarpanı</option>
+              <option value="swing">Son N mumun düşüğü</option>
+            </select>
+          </label>
+          {risk.stop === "percent" && numberField("Stop %", risk.stopPercent, (stopPercent) => set({ stopPercent }))}
+          {risk.stop === "price" && numberField("Stop fiyatı", risk.stopPrice, (stopPrice) => set({ stopPrice }))}
+          {risk.stop === "atr" && (
+            <>
+              {numberField("ATR periyodu", risk.atrPeriod, (atrPeriod) => set({ atrPeriod }))}
+              {numberField("ATR çarpanı", risk.atrMult, (atrMult) => set({ atrMult }))}
+            </>
+          )}
+          {risk.stop === "swing" && numberField("Mum sayısı", risk.swingBars, (swingBars) => set({ swingBars }))}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
+          <label>Take Profit
+            <select data-testid="risk-target" aria-label="Take Profit" value={risk.target} onChange={(event) => set({ target: event.target.value as RiskDraft["target"] })} style={field}>
+              <option value="none">Hedef yok</option>
+              <option value="percent">Sabit yüzde</option>
+              <option value="price">Sabit fiyat</option>
+              <option value="rr" disabled={stopOff}>Risk/ödül</option>
+            </select>
+          </label>
+          {risk.target === "percent" && numberField("Hedef %", risk.targetPercent, (targetPercent) => set({ targetPercent }))}
+          {risk.target === "price" && numberField("Hedef fiyatı", risk.targetPrice, (targetPrice) => set({ targetPrice }))}
+          {risk.target === "rr" && (
+            <>
+              <select data-testid="risk-reward" aria-label="Risk ödül" value={[1, 2, 3].includes(risk.rewardMultiple) ? String(risk.rewardMultiple) : "custom"} onChange={(event) => {
+                const value = event.target.value;
+                if (value === "custom") set({ rewardMultiple: [1, 2, 3].includes(risk.rewardMultiple) ? 1.5 : risk.rewardMultiple });
+                else set({ rewardMultiple: Number(value) });
+              }} style={field}>
+                <option value="1">1'e 1</option>
+                <option value="2">1'e 2</option>
+                <option value="3">1'e 3</option>
+                <option value="custom">Kullanıcı tanımlı</option>
+              </select>
+              {![1, 2, 3].includes(risk.rewardMultiple) && numberField("Ödül çarpanı", risk.rewardMultiple, (rewardMultiple) => set({ rewardMultiple }))}
+            </>
+          )}
+          {stopOff && <span style={{ color: "#9a9a9a" }}>Risk/ödül için başlangıç stopu gerekli.</span>}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
+          <label>Trailing Stop
+            <select data-testid="risk-trail" aria-label="Trailing Stop" value={risk.trail} onChange={(event) => set({ trail: event.target.value as RiskDraft["trail"] })} style={field}>
+              <option value="off">Kapalı</option>
+              <option value="percent">Yüzde</option>
+              <option value="atr">ATR</option>
+            </select>
+          </label>
+          {risk.trail === "percent" && numberField("İz süren %", risk.trailPercent, (trailPercent) => set({ trailPercent }))}
+          {risk.trail === "atr" && (
+            <>
+              {numberField("İz süren ATR", risk.trailAtrPeriod, (trailAtrPeriod) => set({ trailAtrPeriod }))}
+              {numberField("İz süren çarpan", risk.trailAtrMult, (trailAtrMult) => set({ trailAtrMult }))}
+            </>
+          )}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
+          <label>Pozisyon büyüklüğü
+            <select data-testid="risk-size" aria-label="Pozisyon büyüklüğü" value={risk.size} onChange={(event) => set({ size: event.target.value as RiskDraft["size"] })} style={field}>
+              <option value="equity">Sermaye yüzdesi</option>
+              <option value="shares">Sabit adet</option>
+              <option value="risk" disabled={stopOff}>İşlem riski %</option>
+            </select>
+          </label>
+          {risk.size === "shares" && numberField("Adet", risk.shares, (shares) => set({ shares }))}
+          {risk.size === "equity" && <span style={{ color: "#9a9a9a" }}>Üstteki büyüklük yüzdesi kullanılır.</span>}
+          {risk.size === "risk" && numberField("İşlem riski %", risk.riskPercent, (riskPercent) => set({ riskPercent }))}
+          {stopOff && <span style={{ color: "#9a9a9a" }}>Risk yüzdesi için başlangıç stopu gerekli.</span>}
+        </div>
+        <p data-testid="risk-scale-note" style={{ margin: 0, color: "#9a9a9a" }}>Kademeli giriş ve kademeli kâr alma bu sürümde yok.</p>
+      </div>
+    </details>
+  );
+}
+
 export function StrategyBuilder({
   rows,
   adjustment,
@@ -262,6 +359,7 @@ export function StrategyBuilder({
       sell: current.sellGroups?.flatMap((group) => group.conditions) ?? current.sell,
       buyGroups: current.buyGroups,
       sellGroups: current.sellGroups,
+      risk: settingsFromDraft(current.risk ?? defaultRiskDraft()),
     };
   }
 
@@ -370,10 +468,7 @@ export function StrategyBuilder({
       </div>
       {renderSide("buy", "AL koşulları", "#16c47a")}
       {renderSide("sell", "SAT koşulları", "#e10600")}
-      <section data-testid="risk-placeholder" style={{ border: "1px dashed #3a3a3a", borderRadius: 8, padding: 8, color: "#9a9a9a" }}>
-        <strong style={{ color: "#f2f2f2" }}>Risk yönetimi</strong>
-        <p style={{ margin: "4px 0 0" }}>Stop, hedef, trailing stop, kademeli giriş ve çıkış henüz uygulanmıyor. Bu test onları kullanmaz.</p>
-      </section>
+      <RiskSection risk={draft.risk ?? defaultRiskDraft()} onChange={(risk) => setDraft({ ...draft, risk })} />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button type="button" data-testid="strategy-run-rules" onClick={run} disabled={!rows?.length} style={{ minHeight: 32, padding: "0 12px", borderRadius: 8, border: "1px solid #f2f2f2", background: "#f2f2f2", color: "#111", cursor: "pointer" }}>Testi Başlat</button>
         <button type="button" data-testid="strategy-save" onClick={save} style={{ ...field, cursor: "pointer" }}>Kaydet</button>

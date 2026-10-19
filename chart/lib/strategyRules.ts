@@ -1,6 +1,8 @@
 import { adx, atr, ema, rsi } from "./indicators";
 import { indicatorLine, studyPane, type LineSpec } from "./moreIndicators";
 import { executeLong, invalidStrategy, type EmaCrossSpec, type StrategyIndicators, type StrategyReport } from "./emaCross";
+import { executeManagedLong } from "./riskBacktest";
+import { inactiveSettings, isRiskActive, riskError, type RiskSettings } from "./riskPlan";
 import type { OhlcBar } from "./parseOhlcv";
 
 export type Join = "and" | "or";
@@ -29,24 +31,9 @@ export type ConditionGroup = {
   conditions: Condition[];
 };
 
-/** Stop, hedef ve kademeli emir bu sürümde yok. Motor bu alanı okumaz. */
-export type RiskPlan = {
-  applied: false;
-  stop: null;
-  target: null;
-  trailing: null;
-  scaleIn: null;
-  scaleOut: null;
-};
-
-export const UNUSED_RISK: RiskPlan = {
-  applied: false,
-  stop: null,
-  target: null,
-  trailing: null,
-  scaleIn: null,
-  scaleOut: null,
-};
+export type { RiskSettings };
+/** Kapalı risk. Bu hali executeLong ile aynı sonucu verir. Kademeli giriş ve çıkış yok. */
+export const UNUSED_RISK: RiskSettings = inactiveSettings();
 
 export type StrategyRules = {
   name: string;
@@ -60,7 +47,7 @@ export type StrategyRules = {
   sell: Condition[];
   buyGroups?: ConditionGroup[];
   sellGroups?: ConditionGroup[];
-  risk?: RiskPlan;
+  risk?: RiskSettings;
 };
 
 type Series = Array<number | null>;
@@ -350,16 +337,18 @@ export function backtestRules(bars: OhlcBar[], rules: StrategyRules, adjustment:
     feeRate: rules.feeRate,
     slippageRate: rules.slippageRate,
   };
-  const issue = rulesError(rules);
+  const issue = rulesError(rules) ?? riskError(rules.risk);
   if (issue) return invalidStrategy(spec, adjustment, issue, indicators);
   const cache = cacheFor(bars, indicators, listedConditions(rules));
-  return executeLong(bars, spec, adjustment, (index, inPosition) => {
+  const signal = (index: number, inPosition: boolean) => {
     const buy = sideMet(rules.buyGroups, rules.buy, rules.buyJoin, index, cache);
     const sell = sideMet(rules.sellGroups, rules.sell, rules.sellJoin, index, cache);
-    if (!inPosition && buy) return "buy";
-    if (inPosition && sell) return "sell";
+    if (!inPosition && buy) return "buy" as const;
+    if (inPosition && sell) return "sell" as const;
     return null;
-  }, indicators);
+  };
+  if (rules.risk && isRiskActive(rules.risk)) return executeManagedLong(bars, spec, adjustment, signal, indicators, rules.risk);
+  return executeLong(bars, spec, adjustment, signal, indicators);
 }
 
 export function emaCrossRules(fast = 20, slow = 50, money: Partial<Pick<StrategyRules, "capital" | "allocation" | "feeRate" | "slippageRate">> = {}): StrategyRules {
