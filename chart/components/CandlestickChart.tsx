@@ -301,7 +301,7 @@ export function CandlestickChart() {
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !rows?.length || replay) return;
-    const oscillators = (strategyOverlay?.rsiPeriods?.length ?? 0) + (strategyOverlay?.adxPeriods?.length ?? 0) + (strategyOverlay?.atrPeriods?.length ?? 0);
+    const oscillators = (strategyOverlay?.rsiPeriods?.length ?? 0) + (strategyOverlay?.adxPeriods?.length ?? 0) + (strategyOverlay?.atrPeriods?.length ?? 0) + (strategyOverlay?.studies ?? []).filter((study) => study.pane === "osc").length;
     const replaceMerge = ["series", "xAxis", "yAxis", "grid", "legend", ...(oscillators || oscRef.current ? ["dataZoom"] : [])];
     oscRef.current = oscillators > 0;
     chart.setOption(candleOption(rows, range, null, strategyOverlay), { replaceMerge });

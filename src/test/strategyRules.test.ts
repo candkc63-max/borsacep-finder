@@ -4,7 +4,7 @@ import { overlayFromReport, candleOption } from "../../chart/lib/candleChart";
 import { backtestEmaCross, priceSeriesNote, projectStrategy, type EmaCrossSpec } from "../../chart/lib/emaCross";
 import { adx, atr, rsi } from "../../chart/lib/indicators";
 import { parseOhlcvCsv, type OhlcBar } from "../../chart/lib/parseOhlcv";
-import { backtestRules, conditionSeries, emaCrossRules, type Condition, type StrategyRules } from "../../chart/lib/strategyRules";
+import { backtestRules, conditionSeries, emaCrossRules, groupSignal, UNUSED_RISK, type Condition, type LineSpec, type StrategyRules } from "../../chart/lib/strategyRules";
 import { loadStrategies, parseStrategies, saveStrategies, serializeStrategies, type SavedStrategy } from "../../chart/lib/strategyStore";
 
 function bar(index: number, open: number, high: number, low: number, close: number): OhlcBar {
@@ -247,6 +247,78 @@ describe("NAS100 kural motoru", () => {
   });
 });
 
+function line(name: LineSpec["name"], patch: Partial<LineSpec> = {}): LineSpec {
+  return { name, period: 14, fast: 12, slow: 26, signal: 9, mult: 2, atrPeriod: 10, smooth: 3, line: "line", ...patch };
+}
+
+describe("karşılaştırma ve gruplar", () => {
+  it("EMA kesişimi yeni karşılaştırma yoluyla eski motorla aynıdır", () => {
+    const opens = [10, 10, 10, 11, 20, 8, 7];
+    const closes = [10, 10, 10, 11, 13, 8, 6];
+    const bars = opens.map((open, index) => bar(index, open, Math.max(open, closes[index]), Math.min(open, closes[index]), closes[index]));
+    const legacy = backtestEmaCross(bars, { fast: 2, slow: 3, capital: 1000, allocation: 1, feeRate: 0, slippageRate: 0 }, note);
+    const rules = backtestRules(bars, money({
+      capital: 1000,
+      buy: [{
+        id: "b",
+        kind: "compare",
+        left: { source: "indicator", spec: line("ema", { period: 2 }) },
+        op: "cross-up",
+        right: { source: "indicator", spec: line("ema", { period: 3 }) },
+        length: 1,
+      }],
+      sell: [{
+        id: "s",
+        kind: "compare",
+        left: { source: "indicator", spec: line("ema", { period: 2 }) },
+        op: "cross-down",
+        right: { source: "indicator", spec: line("ema", { period: 3 }) },
+        length: 1,
+      }],
+    }), note);
+    expect(rules.trades).toEqual(legacy.trades);
+    expect(rules.equity).toEqual(legacy.equity);
+  });
+
+  it("grupları önce kendi içinde, sonra dış operatörle hesaplar", () => {
+    const bars = [2, 4, 8, 1].map((span, index) => flat(index, span));
+    const above = (level: number, id: string): Condition => ({ id, kind: "atr-level", period: 1, level, relation: "above" });
+    const below = (level: number, id: string): Condition => ({ id, kind: "atr-level", period: 1, level, relation: "below" });
+    const grouped = groupSignal(bars, [
+      { id: "g1", join: "or", conditions: [above(3, "a"), below(6, "b")] },
+      { id: "g2", join: "and", conditions: [above(6, "c")] },
+    ], "and");
+    expect(grouped).toEqual([false, false, true, false]);
+    const precedence = [false, true, true, false];
+    expect(grouped).not.toEqual(precedence);
+  });
+
+  it("önceki ve son N mum kırılımı sinyal mumunu pencereye katmaz", () => {
+    const bars = [
+      bar(0, 10, 10, 10, 10),
+      bar(1, 11, 12, 11, 11),
+      bar(2, 11, 11, 11, 11),
+      bar(3, 12, 13, 9, 13),
+    ];
+    const previous = conditionSeries(bars, [{ id: "p", kind: "compare", left: { source: "price", field: "close" }, op: "break-prev-high", right: { source: "constant", value: 0 }, length: 1 }], "and");
+    expect(previous).toEqual([false, true, false, true]);
+    const window = conditionSeries(bars, [{ id: "n", kind: "compare", left: { source: "price", field: "close" }, op: "break-highest", right: { source: "constant", value: 0 }, length: 2 }], "and");
+    expect(window).toEqual([false, false, false, true]);
+  });
+
+  it("risk alanını okumaz ve büyük ile üzerinde aynı sıkı karşılaştırmadır", () => {
+    const bars = [1, 2, 3, 4].map((index) => flat(index, 2, 10));
+    const base = money({ buy: [{ id: "a", kind: "atr-level", period: 1, level: 0, relation: "above" }] });
+    const withRisk = backtestRules(bars, { ...base, risk: UNUSED_RISK }, note);
+    expect(withRisk.trades).toEqual(backtestRules(bars, base, note).trades);
+    const level = { source: "constant" as const, value: 1 };
+    const above = conditionSeries(bars, [{ id: "gt", kind: "compare", left: { source: "price", field: "close" }, op: "gt", right: level, length: 1 }], "and");
+    const over = conditionSeries(bars, [{ id: "ab", kind: "compare", left: { source: "price", field: "close" }, op: "above", right: level, length: 1 }], "and");
+    expect(above).toEqual(over);
+    expect(above[0]).toBe(true);
+  });
+});
+
 describe("strateji kaydı ve grafik", () => {
   it("kaydı yükler, bozuk kaydı atar", () => {
     const record: SavedStrategy = {
@@ -295,5 +367,11 @@ describe("strateji kaydı ve grafik", () => {
     expect(names).toContain("ATR 14");
     expect(names).not.toContain("Hacim");
     expect(osc.grid).toHaveLength(4);
+    const smaRules = backtestRules([flat(0, 1), flat(1, 1), flat(2, 1), flat(3, 1)], money({
+      buy: [{ id: "sma", kind: "compare", left: { source: "price", field: "close" }, op: "above", right: { source: "indicator", spec: line("sma", { period: 2 }) }, length: 1 }],
+    }), note);
+    const overlay = overlayFromReport(smaRules);
+    const drawn = candleOption([flat(0, 1), flat(1, 1), flat(2, 1)], 20, null, overlay);
+    expect((drawn.series as Array<{ name?: string }>).map((series) => series.name)).toContain("SMA 2");
   });
 });

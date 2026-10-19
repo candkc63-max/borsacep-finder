@@ -16,6 +16,7 @@ export type StrategyIndicators = {
   rsi: number[];
   adx: number[];
   atr: number[];
+  studies?: Array<{ label: string; pane: "price" | "osc"; spec: { name: string; period: number; fast: number; slow: number; signal: number; mult: number; atrPeriod: number; smooth: number; line: string } }>;
 };
 
 export type SideSignal = "buy" | "sell" | null;

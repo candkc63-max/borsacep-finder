@@ -1,6 +1,7 @@
 import type { EChartsCoreOption } from "echarts";
 import { strategyMarks, type StrategyReport } from "./emaCross";
 import { adx, atr, ema, rsi } from "./indicators";
+import { indicatorLine, type LineSpec } from "./moreIndicators";
 import type { TradeMark } from "./manualBacktest";
 import type { OhlcBar } from "./parseOhlcv";
 
@@ -39,6 +40,7 @@ export type ChartOverlay = {
   rsiPeriods?: number[];
   adxPeriods?: number[];
   atrPeriods?: number[];
+  studies?: Array<{ label: string; pane: "price" | "osc"; spec: LineSpec }>;
 };
 
 const EMA_COLORS = ["#f5c542", "#7aa2ff", "#c9a227", "#d0d0d0", "#16c47a", "#9ad0ff"];
@@ -51,7 +53,9 @@ export function overlayFromReport(report: StrategyReport): ChartOverlay | null {
   if (!report.ok) return null;
   const indicators = report.indicators ?? { emas: [report.spec.fast, report.spec.slow], rsi: [], adx: [], atr: [] };
   const marks = strategyMarks(report.trades);
-  const plain = indicators.rsi.length === 0 && indicators.adx.length === 0 && indicators.atr.length === 0
+  const studies = indicators.studies ?? [];
+  const plain = studies.length === 0
+    && indicators.rsi.length === 0 && indicators.adx.length === 0 && indicators.atr.length === 0
     && indicators.emas.length === 2
     && indicators.emas[0] === report.spec.fast
     && indicators.emas[1] === report.spec.slow;
@@ -63,6 +67,7 @@ export function overlayFromReport(report: StrategyReport): ChartOverlay | null {
     rsiPeriods: indicators.rsi,
     adxPeriods: indicators.adx,
     atrPeriods: indicators.atr,
+    studies,
     marks,
   };
 }
@@ -87,6 +92,11 @@ export function candleOption(
         ...uniquePeriods(overlay.rsiPeriods).map((period) => ({ name: `RSI ${period}`, data: rsi(closes, period), min: 0, max: 100, color: "#c9a227" })),
         ...uniquePeriods(overlay.adxPeriods).map((period) => ({ name: `ADX ${period}`, data: adx(rows, period), min: 0, max: 100, color: "#7aa2ff" })),
         ...uniquePeriods(overlay.atrPeriods).map((period) => ({ name: `ATR ${period}`, data: atr(rows, period), color: "#f5c542" })),
+        ...(overlay.studies ?? []).filter((study) => study.pane === "osc").map((study, index) => ({
+          name: study.label,
+          data: indicatorLine(rows, study.spec),
+          color: EMA_COLORS[index % EMA_COLORS.length],
+        })),
       ]
     : [];
   if (strategyOscillators.length) return oscillatorOption(rows, visibleBars, replay, overlay, strategyOscillators);
@@ -94,12 +104,14 @@ export function candleOption(
   const fastLine = overlay?.fastPeriod != null ? ema(closes, overlay.fastPeriod) : [];
   const slowLine = overlay?.slowPeriod != null && overlay.slowPeriod !== overlay.fastPeriod ? ema(closes, overlay.slowPeriod) : [];
   const extraEmas = emaPeriods.filter((period) => period !== overlay?.fastPeriod && period !== overlay?.slowPeriod);
+  const priceStudies = (overlay?.studies ?? []).filter((study) => study.pane === "price");
   const marks = [...(replay?.trades ?? []), ...(overlay?.marks ?? [])];
   const legendNames = [
     ...(replay ? ["EMA 5", "EMA 8", "EMA 13"] : []),
     ...(overlay?.fastPeriod != null ? [`EMA ${overlay.fastPeriod}`] : []),
     ...(overlay?.slowPeriod != null && overlay.slowPeriod !== overlay.fastPeriod ? [`EMA ${overlay.slowPeriod}`] : []),
     ...extraEmas.map((period) => `EMA ${period}`),
+    ...priceStudies.map((study) => study.label),
   ];
   const volumes = rows.map((row) => ({
     value: row.volume ?? 0,
@@ -338,6 +350,7 @@ export function candleOption(
       ...(overlay?.fastPeriod != null ? [line(`EMA ${overlay.fastPeriod}`, fastLine, "#f5c542")] : []),
       ...(overlay?.slowPeriod != null && overlay.slowPeriod !== overlay.fastPeriod ? [line(`EMA ${overlay.slowPeriod}`, slowLine, "#7aa2ff")] : []),
       ...extraEmas.map((period, index) => line(`EMA ${period}`, ema(closes, period), EMA_COLORS[(index + 2) % EMA_COLORS.length])),
+      ...priceStudies.map((study, index) => line(study.label, indicatorLine(rows, study.spec), EMA_COLORS[index % EMA_COLORS.length])),
       ...(lower === "volume"
         ? [{
             name: "Hacim",
@@ -375,6 +388,7 @@ function oscillatorOption(
   const legendNames = [
     ...(replay ? ["EMA 5", "EMA 8", "EMA 13"] : []),
     ...drawn.map((period) => `EMA ${period}`),
+    ...(overlay?.studies ?? []).filter((study) => study.pane === "price").map((study) => study.label),
     ...panes.map((pane) => pane.name),
   ];
   const paneCount = 1 + lower.length;
@@ -524,6 +538,7 @@ function oscillatorOption(
         ? [line("EMA 5", ema(closes, 5), "#d0d0d0"), line("EMA 8", ema(closes, 8), "#c9a227"), line("EMA 13", ema(closes, 13), "#7aa2ff")]
         : []),
       ...drawn.map((period, index) => line(`EMA ${period}`, emaLines.get(period) ?? [], EMA_COLORS[index % EMA_COLORS.length])),
+      ...(overlay?.studies ?? []).filter((study) => study.pane === "price").map((study, index) => line(study.label, indicatorLine(rows, study.spec), EMA_COLORS[index % EMA_COLORS.length])),
       ...lower.map((pane, index) => line(pane.name, pane.data, pane.color, index + 1)),
     ],
   };
