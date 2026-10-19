@@ -11,6 +11,15 @@ export type EmaCrossSpec = {
   slippageRate: number;
 };
 
+export type StrategyIndicators = {
+  emas: number[];
+  rsi: number[];
+  adx: number[];
+  atr: number[];
+};
+
+export type SideSignal = "buy" | "sell" | null;
+
 export type StrategyTrade = {
   signalIndex: number;
   entryIndex: number;
@@ -35,6 +44,7 @@ export type StrategyReport = {
   ok: boolean;
   error: string | null;
   spec: EmaCrossSpec;
+  indicators: StrategyIndicators;
   adjustment: string;
   from: string | null;
   to: string | null;
@@ -64,11 +74,16 @@ export function priceSeriesNote(source: "csv" | "yahoo"): string {
   return "Yahoo quote OHLC. adjclose okunmuyor; temettü düzeltmesi uygulanmadı.";
 }
 
-function empty(spec: EmaCrossSpec, adjustment: string, error: string, bars = 0): StrategyReport {
+export function invalidStrategy(spec: EmaCrossSpec, adjustment: string, error: string, indicators: StrategyIndicators = { emas: [], rsi: [], adx: [], atr: [] }): StrategyReport {
+  return empty(spec, adjustment, error, 0, indicators);
+}
+
+function empty(spec: EmaCrossSpec, adjustment: string, error: string, bars = 0, indicators: StrategyIndicators = { emas: [], rsi: [], adx: [], atr: [] }): StrategyReport {
   return {
     ok: false,
     error,
     spec,
+    indicators,
     adjustment,
     from: null,
     to: null,
@@ -154,30 +169,9 @@ function metrics(spec: EmaCrossSpec, trades: StrategyTrade[], equity: number[]):
 export function backtestEmaCross(bars: OhlcBar[], spec: EmaCrossSpec, adjustment: string): StrategyReport {
   if (!Number.isInteger(spec.fast) || spec.fast < 1) return empty(spec, adjustment, "Hızlı EMA tam sayı ve en az 1 olmalı.");
   if (!Number.isInteger(spec.slow) || spec.slow <= spec.fast) return empty(spec, adjustment, "Yavaş EMA, hızlı EMA'dan büyük bir tam sayı olmalı.");
-  if (!(spec.capital > 0)) return empty(spec, adjustment, "Başlangıç sermayesi sıfırdan büyük olmalı.");
-  if (!(spec.allocation > 0) || spec.allocation > 1) return empty(spec, adjustment, "Pozisyon büyüklüğü yüzde 1 ile 100 arasında olmalı.");
-  if (!(spec.feeRate >= 0) || !(spec.slippageRate >= 0)) return empty(spec, adjustment, "Komisyon ve kayma negatif olamaz.");
-  if (!bars.length) return empty(spec, adjustment, "Mum serisi boş.");
-  let previous: string | null = null;
-  for (let index = 0; index < bars.length; index += 1) {
-    const issue = problem(bars[index], index, previous);
-    if (issue) return empty(spec, adjustment, issue, bars.length);
-    previous = bars[index].time;
-  }
-
   const closes = bars.map((bar) => bar.close);
   const fast = ema(closes, spec.fast);
   const slow = ema(closes, spec.slow);
-  const trades: StrategyTrade[] = [];
-  const equity: number[] = [];
-  let cash = spec.capital;
-  let shares = 0;
-  let entryPrice = 0;
-  let entryCommission = 0;
-  let signalIndex = -1;
-  let pending: "buy" | "sell" | null = null;
-  let pendingIndex = -1;
-
   const crossUp = (index: number) => {
     const previousFast = fast[index - 1];
     const previousSlow = slow[index - 1];
@@ -194,6 +188,39 @@ export function backtestEmaCross(bars: OhlcBar[], spec: EmaCrossSpec, adjustment
     if (previousFast == null || previousSlow == null || nextFast == null || nextSlow == null) return false;
     return previousFast >= previousSlow && nextFast < nextSlow;
   };
+  return executeLong(bars, spec, adjustment, (index, inPosition) => {
+    if (!inPosition && crossUp(index)) return "buy";
+    if (inPosition && crossDown(index)) return "sell";
+    return null;
+  }, { emas: [spec.fast, spec.slow], rsi: [], adx: [], atr: [] });
+}
+
+export function executeLong(
+  bars: OhlcBar[],
+  spec: EmaCrossSpec,
+  adjustment: string,
+  signal: (index: number, inPosition: boolean) => SideSignal,
+  indicators: StrategyIndicators,
+): StrategyReport {
+  if (!(spec.capital > 0)) return empty(spec, adjustment, "Başlangıç sermayesi sıfırdan büyük olmalı.", 0, indicators);
+  if (!(spec.allocation > 0) || spec.allocation > 1) return empty(spec, adjustment, "Pozisyon büyüklüğü yüzde 1 ile 100 arasında olmalı.", 0, indicators);
+  if (!(spec.feeRate >= 0) || !(spec.slippageRate >= 0)) return empty(spec, adjustment, "Komisyon ve kayma negatif olamaz.", 0, indicators);
+  if (!bars.length) return empty(spec, adjustment, "Mum serisi boş.", 0, indicators);
+  let previous: string | null = null;
+  for (let index = 0; index < bars.length; index += 1) {
+    const issue = problem(bars[index], index, previous);
+    if (issue) return empty(spec, adjustment, issue, bars.length, indicators);
+    previous = bars[index].time;
+  }
+
+  const trades: StrategyTrade[] = [];
+  const equity: number[] = [];
+  let cash = spec.capital;
+  let shares = 0;
+  let entryPrice = 0;
+  let entryCommission = 0;
+  let pending: "buy" | "sell" | null = null;
+  let pendingIndex = -1;
 
   for (let index = 0; index < bars.length; index += 1) {
     const open = bars[index].open;
@@ -206,9 +233,8 @@ export function backtestEmaCross(bars: OhlcBar[], spec: EmaCrossSpec, adjustment
         shares = qty;
         entryPrice = fill;
         entryCommission = commission;
-        signalIndex = pendingIndex;
         trades.push({
-          signalIndex,
+          signalIndex: pendingIndex,
           entryIndex: index,
           exitSignalIndex: null,
           exitIndex: null,
@@ -236,24 +262,21 @@ export function backtestEmaCross(bars: OhlcBar[], spec: EmaCrossSpec, adjustment
     }
     pending = null;
     if (index < bars.length - 1) {
-      if (shares === 0 && crossUp(index)) {
-        pending = "buy";
-        pendingIndex = index;
-      } else if (shares > 0 && crossDown(index)) {
-        pending = "sell";
+      const next = signal(index, shares > 0);
+      if (next) {
+        pending = next;
         pendingIndex = index;
       }
     }
     equity.push(cash + shares * bars[index].close);
   }
 
-  const hanging = shares === 0 && crossUp(bars.length - 1)
-    ? { side: "buy" as const, signalIndex: bars.length - 1 }
-    : shares > 0 && crossDown(bars.length - 1)
-      ? { side: "sell" as const, signalIndex: bars.length - 1 }
-      : pending
-        ? { side: pending, signalIndex: pendingIndex }
-        : null;
+  const lastSignal = signal(bars.length - 1, shares > 0);
+  const hanging = lastSignal
+    ? { side: lastSignal, signalIndex: bars.length - 1 }
+    : pending
+      ? { side: pending, signalIndex: pendingIndex }
+      : null;
 
   const buyFill = bars[0].open * (1 + spec.slippageRate);
   const buyShares = wholeShares(spec.capital * spec.allocation, buyFill, spec.feeRate);
@@ -271,6 +294,7 @@ export function backtestEmaCross(bars: OhlcBar[], spec: EmaCrossSpec, adjustment
     ok: true,
     error: null,
     spec,
+    indicators,
     adjustment,
     from: bars[0].time,
     to: bars[bars.length - 1].time,

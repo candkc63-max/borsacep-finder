@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import * as echarts from "echarts";
-import { candleOption, windowPercent, type ChartOverlay } from "../lib/candleChart";
+import { candleOption, overlayFromReport, windowPercent } from "../lib/candleChart";
 import { replayDelay, replayFocus, replaySlice, stepCursor } from "../lib/indicators";
 import { NAS100_CHOICE, type ChartChoice } from "../lib/chartSearch";
 import { SymbolSearch } from "./SymbolSearch";
 import { simulateManual, validateManualOrder, type ManualOrder, type Side } from "../lib/manualBacktest";
 import { parseOhlcvCsv, type OhlcBar } from "../lib/parseOhlcv";
 import { parseJsonResponse } from "../lib/readJson";
-import { priceSeriesNote, projectStrategy, strategyMarks, type StrategyReport } from "../lib/emaCross";
+import { priceSeriesNote, projectStrategy, type StrategyReport } from "../lib/emaCross";
 import { StrategyPanel } from "./StrategyPanel";
 
 const RANGES = [
@@ -79,6 +79,7 @@ export function CandlestickChart() {
   const userWindowRef = useRef<{ start: number; end: number } | null>(null);
   const applyingZoom = useRef(false);
   const replayRef = useRef<Replay | null>(null);
+  const oscRef = useRef(false);
   const [rows, setRows] = useState<OhlcBar[] | null>(null);
   const [choice, setChoice] = useState<ChartChoice>(NAS100_CHOICE);
   const [error, setError] = useState("");
@@ -233,11 +234,7 @@ export function CandlestickChart() {
     if (!strategy || !rows?.length) return null;
     return replay ? projectStrategy(strategy, rows, replay.cursor) : strategy;
   }, [strategy, rows, replay]);
-  const strategyOverlay = useMemo<ChartOverlay | null>(() => (
-    strategyView?.ok
-      ? { fastPeriod: strategyView.spec.fast, slowPeriod: strategyView.spec.slow, marks: strategyMarks(strategyView.trades) }
-      : null
-  ), [strategyView]);
+  const strategyOverlay = useMemo(() => (strategyView ? overlayFromReport(strategyView) : null), [strategyView]);
 
   useEffect(() => {
     if (!replay || !rows?.[replay.cursor]) return;
@@ -304,7 +301,10 @@ export function CandlestickChart() {
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !rows?.length || replay) return;
-    chart.setOption(candleOption(rows, range, null, strategyOverlay), { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend"] });
+    const oscillators = (strategyOverlay?.rsiPeriods?.length ?? 0) + (strategyOverlay?.adxPeriods?.length ?? 0) + (strategyOverlay?.atrPeriods?.length ?? 0);
+    const replaceMerge = ["series", "xAxis", "yAxis", "grid", "legend", ...(oscillators || oscRef.current ? ["dataZoom"] : [])];
+    oscRef.current = oscillators > 0;
+    chart.setOption(candleOption(rows, range, null, strategyOverlay), { replaceMerge });
   }, [strategyOverlay, rows, replay, range]);
 
   function exitReplay() {
@@ -312,7 +312,7 @@ export function CandlestickChart() {
     setOrders([]);
     setFormError("");
     if (rows?.length && chartRef.current) {
-      const overlay = strategy?.ok ? { fastPeriod: strategy.spec.fast, slowPeriod: strategy.spec.slow, marks: strategyMarks(strategy.trades) } : null;
+      const overlay = strategy ? overlayFromReport(strategy) : null;
       chartRef.current.setOption(candleOption(rows, 120, null, overlay), { replaceMerge: ["series", "xAxis", "yAxis", "grid", "legend", "dataZoom"] });
       setActive(rows[rows.length - 1] ?? null);
     }

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { backtestEmaCross, type EmaCrossSpec, type StrategyReport, type StrategyTrade } from "../lib/emaCross";
 import type { OhlcBar } from "../lib/parseOhlcv";
+import { StrategyBuilder } from "./StrategyBuilder";
 
 function money(value: number) {
   return value.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -104,6 +105,7 @@ export function StrategyPanel({
   const [fee, setFee] = useState("0.05");
   const [slippage, setSlippage] = useState("0");
   const [formError, setFormError] = useState("");
+  const [mode, setMode] = useState<"ema" | "builder">("ema");
 
   function run() {
     if (!rows?.length) {
@@ -128,8 +130,24 @@ export function StrategyPanel({
 
   const input = { background: "#111", color: "#f2f2f2", border: "1px solid #3a3a3a", borderRadius: 8, minHeight: 32, padding: "0 8px", width: 88 };
 
+  const modeButton = (active: boolean): CSSProperties => ({
+    minHeight: 32,
+    padding: "0 12px",
+    borderRadius: 8,
+    border: "1px solid #3a3a3a",
+    background: active ? "#f2f2f2" : "#161616",
+    color: active ? "#111" : "#f2f2f2",
+    cursor: "pointer",
+  });
+
   return (
     <div data-testid="strategy-panel" style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <button type="button" data-testid="strategy-mode-ema" onClick={() => setMode("ema")} style={modeButton(mode === "ema")}>Hazır EMA</button>
+        <button type="button" data-testid="strategy-mode-builder" onClick={() => setMode("builder")} style={modeButton(mode === "builder")}>Yeni Strateji Oluştur</button>
+      </div>
+      {mode === "builder" && <StrategyBuilder rows={rows} adjustment={adjustment} onReport={onReport} />}
+      {mode === "ema" && (
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
         <label>Hızlı EMA<input value={fast} onChange={(event) => setFast(event.target.value)} style={input} /></label>
         <label>Yavaş EMA<input value={slow} onChange={(event) => setSlow(event.target.value)} style={input} /></label>
@@ -140,7 +158,8 @@ export function StrategyPanel({
         <label>Kayma %<input value={slippage} onChange={(event) => setSlippage(event.target.value)} style={input} /></label>
         <button type="button" data-testid="strategy-run" onClick={run} disabled={!rows?.length} style={{ minHeight: 32, padding: "0 12px", borderRadius: 8, border: "1px solid #f2f2f2", background: "#f2f2f2", color: "#111", cursor: "pointer" }}>Testi Başlat</button>
       </div>
-      <p style={{ margin: 0, color: "#9a9a9a" }}>Strateji Sınayıcı. AL: hızlı EMA yavaş EMA'yı yukarı kesince sonraki açılış. SAT: aşağı kesince sonraki açılış. Short yok. Kesirli adet yok. Son mumdaki sinyal emir sayılmaz.</p>
+      )}
+      {mode === "ema" && <p style={{ margin: 0, color: "#9a9a9a" }}>Strateji Sınayıcı. AL: hızlı EMA yavaş EMA'yı yukarı kesince sonraki açılış. SAT: aşağı kesince sonraki açılış. Short yok. Kesirli adet yok. Son mumdaki sinyal emir sayılmaz.</p>}
       {formError && <p role="alert" style={{ margin: 0, color: "#e10600" }}>{formError}</p>}
       {view && !view.ok && <p role="alert" style={{ margin: 0, color: "#e10600" }}>{view.error}</p>}
       {view?.ok && (
