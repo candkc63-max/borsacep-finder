@@ -86,6 +86,7 @@ describe("google tag snippet", () => {
     const html = readFileSync(path.join(process.cwd(), "index.html"), "utf8");
     const scriptSources = html.match(/googletagmanager\.com\/gtag\/js\?id=G-[A-Z0-9]+/g) ?? [];
 
+    expect(GA_MEASUREMENT_ID).toBe("G-LSWGHNJWQN");
     expect(scriptSources).toEqual([`googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`]);
     expect(html.match(/gtag\('config', 'G-[A-Z0-9]+'/g)).toEqual([`gtag('config', '${GA_MEASUREMENT_ID}'`]);
     expect(html).toContain("send_page_view: false");

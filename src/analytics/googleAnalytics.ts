@@ -1,4 +1,4 @@
-export const GA_MEASUREMENT_ID = "G-1VHEQW3WK1";
+export const GA_MEASUREMENT_ID = "G-LSWGHNJWQN";
 
 type Gtag = (command: string, ...args: unknown[]) => void;
 
