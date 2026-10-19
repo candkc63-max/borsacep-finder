@@ -70,6 +70,7 @@ function clock(time: string) {
 
 export function CandlestickChart() {
   const ref = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const spanRef = useRef(windowPercent(1000, 120));
   const viewSpanRef = useRef(100);
@@ -93,7 +94,7 @@ export function CandlestickChart() {
   const [targetText, setTargetText] = useState("");
   const [formError, setFormError] = useState("");
   const [panelOpen, setPanelOpen] = useState(true);
-  const [panelHeight, setPanelHeight] = useState(188);
+  const [panelHeight, setPanelHeight] = useState(360);
   const [dock, setDock] = useState<"islem" | "gecmis" | "replay" | "strateji">("islem");
   const [strategy, setStrategy] = useState<StrategyReport | null>(null);
   const orderId = useRef(1);
@@ -348,8 +349,12 @@ export function CandlestickChart() {
   function resizePanel(event: ReactPointerEvent<HTMLDivElement>) {
     const startY = event.clientY;
     const startH = panelHeight;
+    const limit = () => {
+      const stage = stageRef.current?.clientHeight ?? window.innerHeight;
+      return Math.max(160, stage - 220);
+    };
     const move = (pointer: PointerEvent | MouseEvent) => {
-      setPanelHeight(Math.min(window.innerHeight * 0.5, Math.max(132, startH - (pointer.clientY - startY))));
+      setPanelHeight(Math.min(limit(), Math.max(160, startH - (pointer.clientY - startY))));
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -388,7 +393,7 @@ export function CandlestickChart() {
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "#000" }}>
+    <div ref={stageRef} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "#000" }}>
       <div style={{ display: "flex", alignItems: "flex-start", padding: "8px 12px 0" }}>
         <SymbolSearch choice={choice} onPick={pickChart} />
       </div>
@@ -413,11 +418,13 @@ export function CandlestickChart() {
         </span>
       </div>
       {error && <p style={{ color: "#e10600", margin: "0 12px 4px" }}>{error}</p>}
-      <div ref={ref} style={{ flex: 1, minHeight: 160 }} />
+      <div ref={ref} style={{ flex: "1 1 auto", minHeight: 160, overflow: "hidden" }} />
       {panelOpen ? (
         <>
-          <div data-testid="term-handle" onPointerDown={resizePanel} style={{ height: 6, cursor: "ns-resize", background: "#161616", borderTop: "1px solid #2c2c2c" }} />
-          <section data-testid="term-dock" style={{ height: panelHeight, minHeight: 0, display: "flex", flexDirection: "column", background: "#0c0c0c", borderTop: "1px solid #2c2c2c", color: "#f2f2f2", font: "12px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
+          <div data-testid="term-handle" aria-label="Panel yüksekliği" onPointerDown={resizePanel} style={{ flex: "0 0 auto", height: 14, cursor: "ns-resize", background: "#161616", borderTop: "1px solid #2c2c2c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ width: 42, height: 3, borderRadius: 2, background: "#5a5a5a" }} />
+          </div>
+          <section data-testid="term-dock" style={{ flex: "0 0 auto", height: panelHeight, maxHeight: "calc(100% - 180px)", minHeight: 0, display: "flex", flexDirection: "column", background: "#0c0c0c", borderTop: "1px solid #2c2c2c", color: "#f2f2f2", font: "12px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 2, borderBottom: "1px solid #2c2c2c", overflowX: "auto" }}>
               {([
                 ["strateji", "Strateji"],
