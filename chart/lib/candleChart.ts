@@ -45,6 +45,25 @@ export type ChartOverlay = {
 
 const EMA_COLORS = ["#f5c542", "#7aa2ff", "#c9a227", "#d0d0d0", "#16c47a", "#9ad0ff"];
 
+function levelLines(marks: TradeMark[]) {
+  return marks.flatMap((trade) => [
+    ...(trade.stop == null
+      ? []
+      : [{
+          yAxis: trade.stop,
+          lineStyle: { color: DOWN, type: "solid" as const, width: 1 },
+          label: { show: true, formatter: "Stop", color: DOWN, position: "insideEndTop" as const },
+        }]),
+    ...(trade.target == null
+      ? []
+      : [{
+          yAxis: trade.target,
+          lineStyle: { color: "#16c47a", type: "solid" as const, width: 1 },
+          label: { show: true, formatter: "Hedef", color: "#16c47a", position: "insideEndBottom" as const },
+        }]),
+  ]);
+}
+
 function uniquePeriods(periods: number[] | undefined) {
   return [...new Set((periods ?? []).filter((period) => Number.isInteger(period) && period >= 1))];
 }
@@ -317,25 +336,7 @@ export function candleOption(
                 padding: [3, 5],
                 borderRadius: 2,
               },
-              data: [
-                { yAxis: last.close },
-                ...(replay?.trades ?? []).flatMap((trade) => [
-                  ...(trade.stop == null
-                    ? []
-                    : [{
-                        yAxis: trade.stop,
-                        lineStyle: { color: DOWN, type: "solid" as const, width: 1 },
-                        label: { show: true, formatter: "Stop", color: DOWN, position: "insideEndTop" as const },
-                      }]),
-                  ...(trade.target == null
-                    ? []
-                    : [{
-                        yAxis: trade.target,
-                        lineStyle: { color: "#16c47a", type: "solid" as const, width: 1 },
-                        label: { show: true, formatter: "Hedef", color: "#16c47a", position: "insideEndBottom" as const },
-                      }]),
-                ]),
-              ],
+              data: [{ yAxis: last.close }, ...levelLines(marks)],
             }
           : undefined,
       },
@@ -530,7 +531,7 @@ function oscillatorOption(
               animation: false,
               lineStyle: { color: last.close >= last.open ? "#ffffff" : DOWN, type: "dashed", width: 1 },
               label: { show: true, position: "end", formatter: price(last.close), color: last.close >= last.open ? "#111111" : "#ffffff", backgroundColor: last.close >= last.open ? "#ffffff" : DOWN, padding: [3, 5], borderRadius: 2 },
-              data: [{ yAxis: last.close }],
+              data: [{ yAxis: last.close }, ...levelLines(marks)],
             }
           : undefined,
       },

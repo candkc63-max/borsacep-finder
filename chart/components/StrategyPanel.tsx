@@ -83,6 +83,16 @@ function tradeCommission(trade: StrategyTrade) {
   return trade.entryCommission + (trade.exitCommission ?? 0);
 }
 
+function exitLabel(trade: StrategyTrade) {
+  if (trade.exitIndex == null) return "Açık";
+  if (trade.exitReason === "stop") return "Stop";
+  if (trade.exitReason === "gap-stop") return "Boşluk stop";
+  if (trade.exitReason === "target") return "Hedef";
+  if (trade.exitReason === "gap-target") return "Boşluk hedef";
+  if (trade.exitReason === "signal") return "Sinyal";
+  return "—";
+}
+
 export function StrategyPanel({
   rows,
   adjustment,
@@ -179,20 +189,27 @@ export function StrategyPanel({
             <Card testId="metric-capital" label="BAŞLANGIÇ" value={money(view.startingCapital)} detail="Test sermayesi" color="#f2f2f2" />
             <Card testId="metric-portfolio" label="PORTFÖY" value={money(view.portfolio)} detail={signed(view.unrealized) + " açık k/z"} color={tone(view.portfolio - view.startingCapital)} />
             <Card testId="metric-hold" label="AL VE TUT" value={percent(view.buyHold?.totalReturn ?? null)} detail={view.buyHold ? `Portföy ${money(view.buyHold.portfolio)}` : "—"} color={tone(view.buyHold?.totalReturn ?? null)} />
+            <Card testId="metric-rr" label="ORTALAMA RİSK/ÖDÜL" value={view.avgRewardRisk == null ? "—" : view.avgRewardRisk.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} detail="Başlangıç stopuna göre" color="#f2f2f2" />
+            <Card testId="metric-stop-exits" label="STOP ÇIKIŞI" value={String(view.stopExits)} detail="Stop ve boşluk stop" color="#e10600" />
+            <Card testId="metric-target-exits" label="HEDEF ÇIKIŞI" value={String(view.targetExits)} detail="Hedef ve boşluk hedef" color="#16c47a" />
+            <Card testId="metric-avg-win" label="ORTALAMA KAZANÇ" value={view.avgWin == null ? "—" : signed(view.avgWin)} detail="Kapanan kazançlar" color="#d8ffe8" />
+            <Card testId="metric-avg-loss" label="ORTALAMA KAYIP" value={view.avgLoss == null ? "—" : signed(view.avgLoss)} detail="Kapanan kayıplar" color="#e10600" />
+            <Card testId="metric-streak" label="MAKS. ARDIŞIK KAYIP" value={String(view.maxConsecutiveLosses)} detail="Üst üste net kayıp" color="#f2f2f2" />
+            <Card testId="metric-slippage" label="KAYMA MALİYETİ" value={money(view.totalSlippage)} detail="Alış ve satış kayması" color="#f2f2f2" />
           </div>
           {view.pending && <div style={{ color: "#f5c542" }}>{view.pending.side === "buy" ? "AL" : "SAT"} sinyali son mumda. Emir gerçekleşmedi.</div>}
           <div style={{ overflowX: "auto", border: "1px solid #2c2c2c", borderRadius: 10 }} data-testid="trade-table">
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720, fontVariantNumeric: "tabular-nums" }}>
               <thead>
                 <tr style={{ color: "#8d8d8d", textAlign: "left" }}>
-                  {["#", "Alış", "Alış fiyatı", "Adet", "Satış", "Satış fiyatı", "Net", "Komisyon"].map((heading) => (
+                  {["#", "Alış", "Alış fiyatı", "Adet", "Satış", "Satış fiyatı", "Net", "Komisyon", "Çıkış"].map((heading) => (
                     <th key={heading} style={{ position: "sticky", top: 0, background: "#161616", padding: "7px 8px", fontWeight: 600 }}>{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {view.trades.length === 0 && (
-                  <tr><td colSpan={8} style={{ padding: "10px 8px", color: "#9a9a9a" }}>Gerçekleşen emir yok.</td></tr>
+                  <tr><td colSpan={9} style={{ padding: "10px 8px", color: "#9a9a9a" }}>Gerçekleşen emir yok.</td></tr>
                 )}
                 {rows && view.trades.map((trade, index) => {
                   const open = trade.exitIndex == null || trade.exitPrice == null;
@@ -206,6 +223,7 @@ export function StrategyPanel({
                       <td style={{ padding: "7px 8px" }}>{open ? "—" : money(trade.exitPrice ?? 0)}</td>
                       <td style={{ padding: "7px 8px", color: open ? "#f5c542" : tone(trade.realized) }}>{open ? "Açık" : signed(trade.realized ?? 0)}</td>
                       <td style={{ padding: "7px 8px" }}>{money(tradeCommission(trade))}</td>
+                      <td style={{ padding: "7px 8px" }}>{exitLabel(trade)}</td>
                     </tr>
                   );
                 })}
