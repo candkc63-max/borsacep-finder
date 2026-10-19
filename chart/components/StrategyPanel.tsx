@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { backtestEmaCross, type EmaCrossSpec, type StrategyReport } from "../lib/emaCross";
+import { useEffect, useRef, useState } from "react";
+import { backtestEmaCross, type EmaCrossSpec, type StrategyReport, type StrategyTrade } from "../lib/emaCross";
 import type { OhlcBar } from "../lib/parseOhlcv";
 
 function money(value: number) {
@@ -15,30 +15,71 @@ function percent(value: number | null) {
   return `${value > 0 ? "+" : ""}${(value * 100).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
-function count(value: number | null) {
+function factor(value: number | null) {
   if (value == null) return "—";
   if (!Number.isFinite(value)) return "Sonsuz";
-  return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+  return value.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function tone(value: number | null) {
+  if (value == null || value === 0) return "#f2f2f2";
+  return value < 0 ? "#e10600" : "#d8ffe8";
 }
 
 function EquityLine({ values }: { values: number[] }) {
-  if (values.length < 2) return null;
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setWidth(Math.max(0, Math.floor(node.clientWidth)));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const height = 88;
+  const pad = 8;
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const width = 320;
-  const height = 72;
   const span = max - min || 1;
-  const step = (width - 2) / (values.length - 1);
-  const points = values.map((value, index) => {
-    const x = index * step;
-    const y = height - 2 - ((value - min) / span) * (height - 4);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+  const inner = Math.max(1, width - pad * 2);
+  const step = values.length > 1 ? inner / (values.length - 1) : 0;
+  const points = width > 0
+    ? values.map((value, index) => {
+        const x = pad + index * step;
+        const y = height - pad - ((value - min) / span) * (height - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" ")
+    : "";
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="72" role="img" aria-label="Sermaye eğrisi">
-      <polyline fill="none" stroke="#f5c542" strokeWidth="1.5" points={points} />
-    </svg>
+    <div ref={ref} data-testid="equity-curve" style={{ width: "100%", minWidth: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", color: "#8d8d8d", marginBottom: 4 }}>
+        <span>Sermaye eğrisi</span>
+        <span>{money(min)} – {money(max)}</span>
+      </div>
+      {width > 0 && values.length > 1 && (
+        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Sermaye eğrisi" style={{ display: "block", maxWidth: "100%" }}>
+          <rect x="0" y="0" width={width} height={height} fill="#111" rx="8" />
+          <polyline fill="none" stroke="#f5c542" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" points={points} />
+        </svg>
+      )}
+    </div>
   );
+}
+
+function Card({ testId, label, value, detail, color }: { testId: string; label: string; value: string; detail: string; color: string }) {
+  return (
+    <article data-testid={testId} style={{ minWidth: 0, background: "#141414", border: "1px solid #2c2c2c", borderRadius: 10, padding: "8px 10px" }}>
+      <div style={{ color: "#8d8d8d", fontSize: 10, letterSpacing: "0.06em" }}>{label}</div>
+      <div style={{ marginTop: 4, color, font: "650 18px/1.15 ui-sans-serif, system-ui, sans-serif", fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ marginTop: 4, color: "#bdbdbd", fontVariantNumeric: "tabular-nums" }}>{detail}</div>
+    </article>
+  );
+}
+
+function tradeCommission(trade: StrategyTrade) {
+  return trade.entryCommission + (trade.exitCommission ?? 0);
 }
 
 export function StrategyPanel({
@@ -88,7 +129,7 @@ export function StrategyPanel({
   const input = { background: "#111", color: "#f2f2f2", border: "1px solid #3a3a3a", borderRadius: 8, minHeight: 32, padding: "0 8px", width: 88 };
 
   return (
-    <div data-testid="strategy-panel" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="strategy-panel" style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
         <label>Hızlı EMA<input value={fast} onChange={(event) => setFast(event.target.value)} style={input} /></label>
         <label>Yavaş EMA<input value={slow} onChange={(event) => setSlow(event.target.value)} style={input} /></label>
@@ -103,35 +144,54 @@ export function StrategyPanel({
       {formError && <p role="alert" style={{ margin: 0, color: "#e10600" }}>{formError}</p>}
       {view && !view.ok && <p role="alert" style={{ margin: 0, color: "#e10600" }}>{view.error}</p>}
       {view?.ok && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
           <div style={{ color: "#9a9a9a" }}>{view.from} → {view.to} · {view.bars} mum{replayOn ? " · replay görünümü" : ""}</div>
           <div style={{ color: "#9a9a9a" }}>{view.adjustment}</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-            <span>Başlangıç <b>{money(view.startingCapital)}</b></span>
-            <span>Portföy <b>{money(view.portfolio)}</b></span>
-            <span>Gerçekleşen <b style={{ color: view.realized < 0 ? "#e10600" : "#f2f2f2" }}>{signed(view.realized)}</b></span>
-            <span>Getiri <b>{percent(view.totalReturn)}</b></span>
-            <span>Açık k/z <b>{signed(view.unrealized)}</b></span>
-            <span>Maks. düşüş <b>{money(view.maxDrawdown)}</b> ({view.maxDrawdownPercent ? percent(-view.maxDrawdownPercent) : "0,00%"})</span>
-            <span>İşlem <b>{view.completed}</b></span>
-            <span>Kazanan <b>{view.wins}</b> Kaybeden <b>{view.losses}</b></span>
-            <span>Başarı <b>{view.winRate == null ? "—" : `${(view.winRate * 100).toLocaleString("tr-TR", { maximumFractionDigits: 2 })}%`}</b></span>
-            <span>Profit factor <b>{count(view.profitFactor)}</b></span>
-            <span>Komisyon <b>{money(view.totalCommission)}</b></span>
-            {view.buyHold && <span>Al ve tut <b>{percent(view.buyHold.totalReturn)}</b> · portföy {money(view.buyHold.portfolio)}</span>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 8 }}>
+            <Card testId="metric-return" label="NET GETİRİ" value={percent(view.totalReturn)} detail={signed(view.realized)} color={tone(view.totalReturn)} />
+            <Card testId="metric-drawdown" label="MAKSİMUM DÜŞÜŞ" value={view.maxDrawdownPercent ? percent(-view.maxDrawdownPercent) : "0,00%"} detail={money(view.maxDrawdown)} color="#e10600" />
+            <Card testId="metric-factor" label="PROFIT FACTOR" value={factor(view.profitFactor)} detail={`${view.wins} kazanç · ${view.losses} kayıp`} color="#f2f2f2" />
+            <Card testId="metric-win" label="BAŞARI ORANI" value={view.winRate == null ? "—" : `${(view.winRate * 100).toLocaleString("tr-TR", { maximumFractionDigits: 2 })}%`} detail={view.completed ? `${view.wins} / ${view.completed}` : "Kapanan işlem yok"} color="#f2f2f2" />
+            <Card testId="metric-trades" label="İŞLEM SAYISI" value={String(view.completed)} detail={view.openShares ? `${view.openShares} adet açık` : "Açık pozisyon yok"} color="#f2f2f2" />
+            <Card testId="metric-fee" label="TOPLAM KOMİSYON" value={money(view.totalCommission)} detail="Alış ve satış" color="#f2f2f2" />
+          </div>
+          <EquityLine values={view.equity} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 8 }}>
+            <Card testId="metric-capital" label="BAŞLANGIÇ" value={money(view.startingCapital)} detail="Test sermayesi" color="#f2f2f2" />
+            <Card testId="metric-portfolio" label="PORTFÖY" value={money(view.portfolio)} detail={signed(view.unrealized) + " açık k/z"} color={tone(view.portfolio - view.startingCapital)} />
+            <Card testId="metric-hold" label="AL VE TUT" value={percent(view.buyHold?.totalReturn ?? null)} detail={view.buyHold ? `Portföy ${money(view.buyHold.portfolio)}` : "—"} color={tone(view.buyHold?.totalReturn ?? null)} />
           </div>
           {view.pending && <div style={{ color: "#f5c542" }}>{view.pending.side === "buy" ? "AL" : "SAT"} sinyali son mumda. Emir gerçekleşmedi.</div>}
-          <EquityLine values={view.equity} />
-          <div>
-            {view.trades.length === 0 && <span style={{ color: "#9a9a9a" }}>Gerçekleşen emir yok.</span>}
-            {rows && view.trades.map((trade) => (
-              <button key={`${trade.entryIndex}-${trade.exitIndex ?? "open"}`} type="button" onClick={() => onFocus(trade.entryIndex)} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 6, padding: "6px 8px", background: "#111", color: "#f2f2f2", border: "1px solid #2c2c2c", borderRadius: 4, cursor: "pointer" }}>
-                <span style={{ color: "#16c47a" }}>AL</span> {rows[trade.entryIndex]?.label} {money(trade.entryPrice)} · {trade.shares} adet
-                {trade.exitIndex == null || trade.exitPrice == null
-                  ? " · açık"
-                  : <> · <span style={{ color: "#e10600" }}>SAT</span> {rows[trade.exitIndex]?.label} {money(trade.exitPrice)} · {signed(trade.realized ?? 0)}</>}
-              </button>
-            ))}
+          <div style={{ overflowX: "auto", border: "1px solid #2c2c2c", borderRadius: 10 }} data-testid="trade-table">
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720, fontVariantNumeric: "tabular-nums" }}>
+              <thead>
+                <tr style={{ color: "#8d8d8d", textAlign: "left" }}>
+                  {["#", "Alış", "Alış fiyatı", "Adet", "Satış", "Satış fiyatı", "Net", "Komisyon"].map((heading) => (
+                    <th key={heading} style={{ position: "sticky", top: 0, background: "#161616", padding: "7px 8px", fontWeight: 600 }}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {view.trades.length === 0 && (
+                  <tr><td colSpan={8} style={{ padding: "10px 8px", color: "#9a9a9a" }}>Gerçekleşen emir yok.</td></tr>
+                )}
+                {rows && view.trades.map((trade, index) => {
+                  const open = trade.exitIndex == null || trade.exitPrice == null;
+                  return (
+                    <tr key={`${trade.entryIndex}-${trade.exitIndex ?? "open"}`} onClick={() => onFocus(trade.entryIndex)} style={{ cursor: "pointer", borderTop: "1px solid #242424" }}>
+                      <td style={{ padding: "7px 8px" }}>{index + 1}</td>
+                      <td style={{ padding: "7px 8px", color: "#16c47a" }}>{rows[trade.entryIndex]?.label}</td>
+                      <td style={{ padding: "7px 8px" }}>{money(trade.entryPrice)}</td>
+                      <td style={{ padding: "7px 8px" }}>{trade.shares}</td>
+                      <td style={{ padding: "7px 8px", color: open ? "#9a9a9a" : "#e10600" }}>{open ? "Açık" : rows[trade.exitIndex ?? 0]?.label}</td>
+                      <td style={{ padding: "7px 8px" }}>{open ? "—" : money(trade.exitPrice ?? 0)}</td>
+                      <td style={{ padding: "7px 8px", color: open ? "#f5c542" : tone(trade.realized) }}>{open ? "Açık" : signed(trade.realized ?? 0)}</td>
+                      <td style={{ padding: "7px 8px" }}>{money(tradeCommission(trade))}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
