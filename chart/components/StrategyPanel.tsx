@@ -240,11 +240,11 @@ export function StrategyPanel({
                         <tr key={`${trade.entryIndex}-legs`} data-testid="scale-legs">
                           <td colSpan={9} style={{ padding: "6px 8px 10px", color: "#cfcfcf", background: "#101010" }}>
                             <div>Ortalama maliyet {money(trade.entryPrice)} · En yüksek adet {trade.maxShares ?? trade.shares} · Açık risk {money(trade.maxRisk ?? 0)}</div>
-                            {legs.entries.map((leg) => (
-                              <div key={`e-${leg.seq}`}>{leg.reason === "entry" ? "Giriş" : `Giriş ${leg.seq}`} · {rows[leg.index]?.label} · {leg.shares} adet · {money(leg.price)} · komisyon {money(leg.commission)}</div>
+                            {legs.entries.map((leg, legIndex) => (
+                              <div key={`e-${leg.seq}`}>Giriş {legIndex + 1} · {rows[leg.index]?.label} · {leg.shares} adet · {money(leg.price)} · komisyon {money(leg.commission)}</div>
                             ))}
-                            {legs.exits.map((leg) => (
-                              <div key={`x-${leg.seq}`}>Satış · {rows[leg.index]?.label} · {leg.shares} adet · {money(leg.price)} · komisyon {money(leg.commission)}</div>
+                            {legs.exits.map((leg, legIndex) => (
+                              <div key={`x-${leg.seq}`}>Satış {legIndex + 1} · {rows[leg.index]?.label} · {leg.shares} adet · {money(leg.price)} · komisyon {money(leg.commission)}</div>
                             ))}
                           </td>
                         </tr>

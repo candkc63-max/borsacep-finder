@@ -218,6 +218,7 @@ export function executeScaledLong(
     maxRisk = 0;
     entryIndex = -1;
     initialStop = null;
+    seq = 0;
   }
 
   function raiseStop(index: number, price: number) {
