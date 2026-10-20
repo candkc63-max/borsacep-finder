@@ -9,6 +9,15 @@ export type Stock = {
   roe: number | null;
   dividendYield: number | null;
   change1y: number | null;
+  changeDay?: number | null;
+  volume?: number | null;
+  averageVolume?: number | null;
+  relativeVolume?: number | null;
+  eps?: number | null;
+  earningsGrowth?: number | null;
+  revenueGrowth?: number | null;
+  week52High?: number | null;
+  week52Distance?: number | null;
 };
 
 export type StockFilter = {

@@ -144,18 +144,25 @@ function groupFourHours(bars) {
 
 // src/server/chartBars.ts
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
-function specFor(id) {
+function chartSpec(id, interval) {
+  const stock = id.match(/^stock-([A-Z]{3,6})$/);
+  if (stock && choiceById(id) && interval && interval !== "1d") {
+    const symbol = `${stock[1]}.IS`;
+    if (interval === "1h") return { symbol, interval: "1h", range: "60d", aggregate: null };
+    if (interval === "4h") return { symbol, interval: "1h", range: "60d", aggregate: "4h" };
+    if (interval === "1wk") return { symbol, interval: "1wk", range: "10y", aggregate: null };
+    return null;
+  }
   if (id === "xu100-1d") return { symbol: "XU100.IS", interval: "1d", range: "5y", aggregate: null };
   if (id === "xu100-1h") return { symbol: "XU100.IS", interval: "1h", range: "60d", aggregate: null };
   if (id === "xu100-4h") return { symbol: "XU100.IS", interval: "1h", range: "60d", aggregate: "4h" };
   if (id === "xu100-1wk") return { symbol: "XU100.IS", interval: "1wk", range: "10y", aggregate: null };
   if (id === "ixic-1d") return { symbol: "^IXIC", interval: "1d", range: "5y", aggregate: null };
-  const stock = id.match(/^stock-([A-Z]{3,6})$/);
   if (stock && choiceById(id)) return { symbol: `${stock[1]}.IS`, interval: "1d", range: "2y", aggregate: null };
   return null;
 }
-async function loadChartBars(id) {
-  const spec = specFor(id);
+async function loadChartBars(id, interval) {
+  const spec = chartSpec(id, interval);
   if (!spec) throw new Error("Bilinmeyen grafik");
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(spec.symbol)}`);
   url.searchParams.set("interval", spec.interval);
@@ -180,16 +187,18 @@ function send(res, status, body) {
 }
 
 // src/server/http/chartBarsHandler.ts
-function chartId(req, request) {
-  const fromQuery = req.query?.id;
-  if (typeof fromQuery === "string") return fromQuery;
+function chartParams(req, request) {
   const raw = request?.url ?? req.url;
-  if (!raw) return "";
-  return new URL(raw, "http://localhost").searchParams.get("id") ?? "";
+  const url = raw ? new URL(raw, "http://localhost") : null;
+  const fromId = req.query?.id;
+  const fromInterval = req.query?.interval;
+  const id = typeof fromId === "string" ? fromId : url?.searchParams.get("id") ?? "";
+  const interval = typeof fromInterval === "string" ? fromInterval : url?.searchParams.get("interval") ?? null;
+  return { id, interval };
 }
-async function load(id) {
+async function load(id, interval) {
   try {
-    const bars = await loadChartBars(id);
+    const bars = await loadChartBars(id, interval);
     return { status: 200, body: { source: "yahoo", bars } };
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : "Grafik al\u0131namad\u0131";
@@ -197,11 +206,13 @@ async function load(id) {
   }
 }
 async function GET(request) {
-  const result = await load(chartId({}, request));
+  const params = chartParams({}, request);
+  const result = await load(params.id, params.interval);
   return Response.json(result.body, { status: result.status });
 }
 async function handler(req, res) {
-  const result = await load(chartId(req));
+  const params = chartParams(req);
+  const result = await load(params.id, params.interval);
   send(res, result.status, result.body);
 }
 export {

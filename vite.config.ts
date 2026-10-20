@@ -30,9 +30,10 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use(async (req, res, next) => {
             const path = req.url?.split("?")[0];
             if (path === "/api/chart-bars") {
-              const id = new URL(req.url ?? "", "http://localhost").searchParams.get("id") ?? "";
+              const query = new URL(req.url ?? "", "http://localhost").searchParams;
+              const id = query.get("id") ?? "";
               try {
-                const bars = await loadChartBars(id);
+                const bars = await loadChartBars(id, query.get("interval"));
                 res.setHeader("content-type", "application/json");
                 res.end(JSON.stringify({ source: "yahoo", bars }));
               } catch (reason) {

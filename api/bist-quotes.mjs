@@ -57,6 +57,12 @@ function mapYahooQuote(base, modules) {
   const pe = raw(modules.summaryDetail?.trailingPE) ?? raw(modules.defaultKeyStatistics?.trailingPE);
   const change = raw(modules.defaultKeyStatistics?.["52WeekChange"]);
   const roe = raw(modules.financialData?.returnOnEquity);
+  const volume = raw(modules.price?.regularMarketVolume);
+  const averageVolume = raw(modules.summaryDetail?.averageVolume) ?? raw(modules.price?.averageDailyVolume10Day) ?? raw(modules.summaryDetail?.averageDailyVolume10Day);
+  const earningsGrowth = raw(modules.financialData?.earningsGrowth);
+  const revenueGrowth = raw(modules.financialData?.revenueGrowth);
+  const week52High = raw(modules.summaryDetail?.fiftyTwoWeekHigh);
+  const changeDay = raw(modules.price?.regularMarketChangePercent);
   return {
     ticker: base.ticker,
     name: base.name,
@@ -67,7 +73,16 @@ function mapYahooQuote(base, modules) {
     pb: raw(modules.defaultKeyStatistics?.priceToBook),
     roe: roe == null ? null : roe * 100,
     dividendYield: dividendPercent(modules.summaryDetail, price),
-    change1y: change == null ? null : change * 100
+    change1y: change == null ? null : change * 100,
+    changeDay,
+    volume,
+    averageVolume,
+    relativeVolume: volume != null && averageVolume != null && averageVolume > 0 ? volume / averageVolume : null,
+    eps: raw(modules.defaultKeyStatistics?.trailingEps),
+    earningsGrowth: earningsGrowth == null ? null : earningsGrowth * 100,
+    revenueGrowth: revenueGrowth == null ? null : revenueGrowth * 100,
+    week52High,
+    week52Distance: week52High != null && price != null && week52High > 0 ? (week52High - price) / week52High * 100 : null
   };
 }
 
