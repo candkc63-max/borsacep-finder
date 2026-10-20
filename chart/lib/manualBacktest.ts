@@ -44,6 +44,7 @@ export type TradeMark = {
   exitBuy: boolean;
   stop: number | null;
   target: number | null;
+  average?: number | null;
   showPrice?: boolean;
 };
 

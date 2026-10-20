@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
 import { backtestEmaCross, type EmaCrossSpec, type StrategyReport, type StrategyTrade } from "../lib/emaCross";
 import type { OhlcBar } from "../lib/parseOhlcv";
 import { StrategyBuilder } from "./StrategyBuilder";
@@ -116,6 +116,7 @@ export function StrategyPanel({
   const [slippage, setSlippage] = useState("0");
   const [formError, setFormError] = useState("");
   const [mode, setMode] = useState<"ema" | "builder">("ema");
+  const [openCycle, setOpenCycle] = useState<number | null>(null);
 
   function run() {
     if (!rows?.length) {
@@ -196,6 +197,8 @@ export function StrategyPanel({
             <Card testId="metric-avg-loss" label="ORTALAMA KAYIP" value={view.avgLoss == null ? "—" : signed(view.avgLoss)} detail="Kapanan kayıplar" color="#e10600" />
             <Card testId="metric-streak" label="MAKS. ARDIŞIK KAYIP" value={String(view.maxConsecutiveLosses)} detail="Üst üste net kayıp" color="#f2f2f2" />
             <Card testId="metric-slippage" label="KAYMA MALİYETİ" value={money(view.totalSlippage)} detail="Alış ve satış kayması" color="#f2f2f2" />
+            <Card testId="metric-max-size" label="MAKS. POZİSYON" value={String(view.maxPosition)} detail="Döngüdeki en yüksek adet" color="#f2f2f2" />
+            <Card testId="metric-max-risk" label="MAKS. AÇIK RİSK" value={money(view.maxOpenRisk)} detail="Stopa kadar açık risk" color="#f2f2f2" />
           </div>
           {view.pending && <div style={{ color: "#f5c542" }}>{view.pending.side === "buy" ? "AL" : "SAT"} sinyali son mumda. Emir gerçekleşmedi.</div>}
           <div style={{ overflowX: "auto", border: "1px solid #2c2c2c", borderRadius: 10 }} data-testid="trade-table">
@@ -213,18 +216,40 @@ export function StrategyPanel({
                 )}
                 {rows && view.trades.map((trade, index) => {
                   const open = trade.exitIndex == null || trade.exitPrice == null;
+                  const legs = trade.legs;
+                  const expanded = openCycle === index && legs;
                   return (
-                    <tr key={`${trade.entryIndex}-${trade.exitIndex ?? "open"}`} onClick={() => onFocus(trade.entryIndex)} style={{ cursor: "pointer", borderTop: "1px solid #242424" }}>
-                      <td style={{ padding: "7px 8px" }}>{index + 1}</td>
-                      <td style={{ padding: "7px 8px", color: "#16c47a" }}>{rows[trade.entryIndex]?.label}</td>
-                      <td style={{ padding: "7px 8px" }}>{money(trade.entryPrice)}</td>
-                      <td style={{ padding: "7px 8px" }}>{trade.shares}</td>
-                      <td style={{ padding: "7px 8px", color: open ? "#9a9a9a" : "#e10600" }}>{open ? "Açık" : rows[trade.exitIndex ?? 0]?.label}</td>
-                      <td style={{ padding: "7px 8px" }}>{open ? "—" : money(trade.exitPrice ?? 0)}</td>
-                      <td style={{ padding: "7px 8px", color: open ? "#f5c542" : tone(trade.realized) }}>{open ? "Açık" : signed(trade.realized ?? 0)}</td>
-                      <td style={{ padding: "7px 8px" }}>{money(tradeCommission(trade))}</td>
-                      <td style={{ padding: "7px 8px" }}>{exitLabel(trade)}</td>
-                    </tr>
+                    <Fragment key={`${trade.entryIndex}-${trade.exitIndex ?? "open"}`}>
+                      <tr onClick={() => onFocus(trade.entryIndex)} style={{ cursor: "pointer", borderTop: "1px solid #242424" }}>
+                        <td style={{ padding: "7px 8px" }}>
+                          {index + 1}
+                          {legs && (
+                            <button type="button" data-testid="scale-toggle" onClick={(event) => { event.stopPropagation(); setOpenCycle(expanded ? null : index); }} style={{ marginLeft: 6, background: "transparent", color: "#f5c542", border: 0, cursor: "pointer" }}>{expanded ? "Kapat" : "Kademeler"}</button>
+                          )}
+                        </td>
+                        <td style={{ padding: "7px 8px", color: "#16c47a" }}>{rows[trade.entryIndex]?.label}</td>
+                        <td style={{ padding: "7px 8px" }}>{money(trade.entryPrice)}</td>
+                        <td style={{ padding: "7px 8px" }}>{open ? trade.shares : (trade.maxShares ?? trade.shares)}</td>
+                        <td style={{ padding: "7px 8px", color: open ? "#9a9a9a" : "#e10600" }}>{open ? "Açık" : rows[trade.exitIndex ?? 0]?.label}</td>
+                        <td style={{ padding: "7px 8px" }}>{open ? "—" : money(trade.exitPrice ?? 0)}</td>
+                        <td style={{ padding: "7px 8px", color: open ? "#f5c542" : tone(trade.realized) }}>{open ? (trade.booked ? signed(trade.booked) : "Açık") : signed(trade.realized ?? 0)}</td>
+                        <td style={{ padding: "7px 8px" }}>{money(tradeCommission(trade))}</td>
+                        <td style={{ padding: "7px 8px" }}>{exitLabel(trade)}</td>
+                      </tr>
+                      {expanded && legs && (
+                        <tr key={`${trade.entryIndex}-legs`} data-testid="scale-legs">
+                          <td colSpan={9} style={{ padding: "6px 8px 10px", color: "#cfcfcf", background: "#101010" }}>
+                            <div>Ortalama maliyet {money(trade.entryPrice)} · En yüksek adet {trade.maxShares ?? trade.shares} · Açık risk {money(trade.maxRisk ?? 0)}</div>
+                            {legs.entries.map((leg) => (
+                              <div key={`e-${leg.seq}`}>{leg.reason === "entry" ? "Giriş" : `Giriş ${leg.seq}`} · {rows[leg.index]?.label} · {leg.shares} adet · {money(leg.price)} · komisyon {money(leg.commission)}</div>
+                            ))}
+                            {legs.exits.map((leg) => (
+                              <div key={`x-${leg.seq}`}>Satış · {rows[leg.index]?.label} · {leg.shares} adet · {money(leg.price)} · komisyon {money(leg.commission)}</div>
+                            ))}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>

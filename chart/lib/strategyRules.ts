@@ -2,7 +2,9 @@ import { adx, atr, ema, rsi } from "./indicators";
 import { indicatorLine, studyPane, type LineSpec } from "./moreIndicators";
 import { executeLong, invalidStrategy, type EmaCrossSpec, type StrategyIndicators, type StrategyReport } from "./emaCross";
 import { executeManagedLong } from "./riskBacktest";
+import { executeScaledLong } from "./scaleBacktest";
 import { inactiveSettings, isRiskActive, riskError, type RiskSettings } from "./riskPlan";
+import { isScaleActive, scaleError, type ScaleSettings } from "./scalePlan";
 import type { OhlcBar } from "./parseOhlcv";
 
 export type Join = "and" | "or";
@@ -48,6 +50,7 @@ export type StrategyRules = {
   buyGroups?: ConditionGroup[];
   sellGroups?: ConditionGroup[];
   risk?: RiskSettings;
+  scale?: ScaleSettings;
 };
 
 type Series = Array<number | null>;
@@ -337,7 +340,7 @@ export function backtestRules(bars: OhlcBar[], rules: StrategyRules, adjustment:
     feeRate: rules.feeRate,
     slippageRate: rules.slippageRate,
   };
-  const issue = rulesError(rules) ?? riskError(rules.risk);
+  const issue = rulesError(rules) ?? riskError(rules.risk) ?? scaleError(rules.scale);
   if (issue) return invalidStrategy(spec, adjustment, issue, indicators);
   const cache = cacheFor(bars, indicators, listedConditions(rules));
   const signal = (index: number, inPosition: boolean) => {
@@ -347,6 +350,7 @@ export function backtestRules(bars: OhlcBar[], rules: StrategyRules, adjustment:
     if (inPosition && sell) return "sell" as const;
     return null;
   };
+  if (rules.scale && isScaleActive(rules.scale)) return executeScaledLong(bars, spec, adjustment, signal, indicators, rules.risk ?? inactiveSettings(), rules.scale);
   if (rules.risk && isRiskActive(rules.risk)) return executeManagedLong(bars, spec, adjustment, signal, indicators, rules.risk);
   return executeLong(bars, spec, adjustment, signal, indicators);
 }
