@@ -11,19 +11,27 @@ type RequestSpec = {
   aggregate: "4h" | null;
 };
 
-function specFor(id: string): RequestSpec | null {
+/** Hisse kimliğinde interval boş veya 1d ise mevcut günlük istek aynen kalır. Endeks kimliğinde interval yok sayılır. */
+export function chartSpec(id: string, interval?: string | null): RequestSpec | null {
+  const stock = id.match(/^stock-([A-Z]{3,6})$/);
+  if (stock && choiceById(id) && interval && interval !== "1d") {
+    const symbol = `${stock[1]}.IS`;
+    if (interval === "1h") return { symbol, interval: "1h", range: "60d", aggregate: null };
+    if (interval === "4h") return { symbol, interval: "1h", range: "60d", aggregate: "4h" };
+    if (interval === "1wk") return { symbol, interval: "1wk", range: "10y", aggregate: null };
+    return null;
+  }
   if (id === "xu100-1d") return { symbol: "XU100.IS", interval: "1d", range: "5y", aggregate: null };
   if (id === "xu100-1h") return { symbol: "XU100.IS", interval: "1h", range: "60d", aggregate: null };
   if (id === "xu100-4h") return { symbol: "XU100.IS", interval: "1h", range: "60d", aggregate: "4h" };
   if (id === "xu100-1wk") return { symbol: "XU100.IS", interval: "1wk", range: "10y", aggregate: null };
   if (id === "ixic-1d") return { symbol: "^IXIC", interval: "1d", range: "5y", aggregate: null };
-  const stock = id.match(/^stock-([A-Z]{3,6})$/);
   if (stock && choiceById(id)) return { symbol: `${stock[1]}.IS`, interval: "1d", range: "2y", aggregate: null };
   return null;
 }
 
-export async function loadChartBars(id: string): Promise<OhlcBar[]> {
-  const spec = specFor(id);
+export async function loadChartBars(id: string, interval?: string | null): Promise<OhlcBar[]> {
+  const spec = chartSpec(id, interval);
   if (!spec) throw new Error("Bilinmeyen grafik");
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(spec.symbol)}`);
   url.searchParams.set("interval", spec.interval);

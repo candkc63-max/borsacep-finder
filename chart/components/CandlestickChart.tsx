@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import * as echarts from "echarts";
 import { candleOption, overlayFromReport, windowPercent } from "../lib/candleChart";
 import { replayDelay, replayFocus, replaySlice, stepCursor } from "../lib/indicators";
-import { NAS100_CHOICE, type ChartChoice } from "../lib/chartSearch";
+import { NAS100_CHOICE, choiceById, type ChartChoice } from "../lib/chartSearch";
+import { tickerFromHash } from "../../src/screener/chartLink";
 import { SymbolSearch } from "./SymbolSearch";
 import { simulateManual, validateManualOrder, type ManualOrder, type Side } from "../lib/manualBacktest";
 import { parseOhlcvCsv, type OhlcBar } from "../lib/parseOhlcv";
@@ -28,6 +29,12 @@ type Replay = {
   speed: number;
   following: boolean;
 };
+
+function choiceFromHash(): ChartChoice {
+  const ticker = tickerFromHash(window.location.hash);
+  if (!ticker) return NAS100_CHOICE;
+  return choiceById(`stock-${ticker}`) ?? NAS100_CHOICE;
+}
 
 function price(value: number) {
   return value.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -81,7 +88,7 @@ export function CandlestickChart() {
   const replayRef = useRef<Replay | null>(null);
   const oscRef = useRef(false);
   const [rows, setRows] = useState<OhlcBar[] | null>(null);
-  const [choice, setChoice] = useState<ChartChoice>(NAS100_CHOICE);
+  const [choice, setChoice] = useState<ChartChoice>(choiceFromHash);
   const [error, setError] = useState("");
   const [active, setActive] = useState<OhlcBar | null>(null);
   const [range, setRange] = useState(120);
@@ -131,6 +138,17 @@ export function CandlestickChart() {
       cancel = true;
     };
   }, [choice]);
+
+  useEffect(() => {
+    const apply = () => {
+      const ticker = tickerFromHash(window.location.hash);
+      if (!ticker) return;
+      const next = choiceById(`stock-${ticker}`);
+      if (next) setChoice(next);
+    };
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
 
   useEffect(() => {
     const el = ref.current;
