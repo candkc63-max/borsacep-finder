@@ -1,5 +1,6 @@
 import { STOCKS, type Stock } from "../data/stocks.js";
 import { mapYahooQuote, type YahooModules } from "../data/yahooQuote.js";
+import { planBatches, quoteReport, settleQuotes, type QuoteReport } from "../screener/coverage.js";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
@@ -39,24 +40,23 @@ async function fetchOne(ticker: string, session: { cookie: string; crumb: string
   return modules;
 }
 
-export async function loadLiveQuotes(): Promise<Stock[]> {
+/** Örnek listedeki semboller sorulur. Liste büyütülmez; kotasyonu boş dönen hisse düşmez, eksik sayılır. */
+export async function loadLiveQuotes(): Promise<QuoteReport> {
   const session = await yahooSession();
-  const stocks: Stock[] = [];
-  const size = 4;
-  for (let i = 0; i < STOCKS.length; i += size) {
-    const slice = STOCKS.slice(i, i + size);
-    const batch = await Promise.all(slice.map(async (stock) => {
+  const asOf = new Date().toISOString();
+  const results: { ticker: string; stock: Stock | null }[] = [];
+  for (const batch of planBatches(STOCKS, 4)) {
+    const part = await Promise.all(batch.map(async (stock) => {
       try {
         const modules = await fetchOne(stock.ticker, session);
         const mapped = mapYahooQuote(stock, modules);
-        if (!mapped.price) return null;
-        return mapped;
+        if (!mapped.price) return { ticker: stock.ticker, stock: null };
+        return { ticker: stock.ticker, stock: mapped };
       } catch {
-        return null;
+        return { ticker: stock.ticker, stock: null };
       }
     }));
-    stocks.push(...batch.filter((item): item is Stock => item != null));
+    results.push(...part);
   }
-  if (stocks.length === 0) throw new Error("Yahoo verisi boş");
-  return stocks;
+  return quoteReport("Yahoo Finance", asOf, settleQuotes(STOCKS, results, asOf, "Yahoo Finance"));
 }

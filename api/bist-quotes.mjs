@@ -86,6 +86,73 @@ function mapYahooQuote(base, modules) {
   };
 }
 
+// src/screener/coverage.ts
+var QUOTE_CACHE_TTL = 15 * 60 * 1e3;
+function planBatches(items, size) {
+  const width = Math.max(1, Math.floor(size) || 1);
+  const batches = [];
+  for (let index = 0; index < items.length; index += width) batches.push(items.slice(index, index + width));
+  return batches;
+}
+function coverageSummary(rows) {
+  let scanned = 0;
+  let missing = 0;
+  let sample = 0;
+  for (const row of rows) {
+    if (row.dataStatus === "ok") scanned += 1;
+    else if (row.dataStatus === "missing") missing += 1;
+    else sample += 1;
+  }
+  return { universe: rows.length, scanned, missing, sample, fullBist: false };
+}
+function blankQuote(stock, asOf, source) {
+  return {
+    ...stock,
+    price: 0,
+    marketCap: 0,
+    pe: null,
+    pb: null,
+    roe: null,
+    dividendYield: null,
+    change1y: null,
+    changeDay: null,
+    volume: null,
+    averageVolume: null,
+    relativeVolume: null,
+    eps: null,
+    earningsGrowth: null,
+    revenueGrowth: null,
+    week52High: null,
+    week52Distance: null,
+    dataStatus: "missing",
+    dataSource: source,
+    dataAsOf: asOf
+  };
+}
+function settleQuotes(universe, results, asOf, source) {
+  const byTicker = new Map(results.map((item) => [item.ticker, item.stock]));
+  return universe.map((stock) => {
+    const live = byTicker.get(stock.ticker);
+    if (live && live.price > 0) {
+      return { ...live, dataStatus: "ok", dataSource: source, dataAsOf: asOf };
+    }
+    return blankQuote(stock, asOf, source);
+  });
+}
+function quoteReport(source, asOf, stocks) {
+  const summary = coverageSummary(stocks.map((stock) => ({ dataStatus: stock.dataStatus ?? "sample" })));
+  return {
+    source,
+    asOf,
+    stocks,
+    scanned: summary.scanned,
+    missing: summary.missing,
+    universe: summary.universe,
+    fullBist: false,
+    membership: null
+  };
+}
+
 // src/server/liveQuotes.ts
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 async function yahooSession() {
@@ -120,24 +187,22 @@ async function fetchOne(ticker, session) {
 }
 async function loadLiveQuotes() {
   const session = await yahooSession();
-  const stocks = [];
-  const size = 4;
-  for (let i = 0; i < STOCKS.length; i += size) {
-    const slice = STOCKS.slice(i, i + size);
-    const batch = await Promise.all(slice.map(async (stock) => {
+  const asOf = (/* @__PURE__ */ new Date()).toISOString();
+  const results = [];
+  for (const batch of planBatches(STOCKS, 4)) {
+    const part = await Promise.all(batch.map(async (stock) => {
       try {
         const modules = await fetchOne(stock.ticker, session);
         const mapped = mapYahooQuote(stock, modules);
-        if (!mapped.price) return null;
-        return mapped;
+        if (!mapped.price) return { ticker: stock.ticker, stock: null };
+        return { ticker: stock.ticker, stock: mapped };
       } catch {
-        return null;
+        return { ticker: stock.ticker, stock: null };
       }
     }));
-    stocks.push(...batch.filter((item) => item != null));
+    results.push(...part);
   }
-  if (stocks.length === 0) throw new Error("Yahoo verisi bo\u015F");
-  return stocks;
+  return quoteReport("Yahoo Finance", asOf, settleQuotes(STOCKS, results, asOf, "Yahoo Finance"));
 }
 
 // src/server/http/nodeRes.ts
@@ -148,8 +213,8 @@ function send(res, status, body) {
 // src/server/http/quotesHandler.ts
 async function load() {
   try {
-    const stocks = await loadLiveQuotes();
-    return { status: 200, body: { source: "yahoo", asOf: (/* @__PURE__ */ new Date()).toISOString(), stocks } };
+    const report = await loadLiveQuotes();
+    return { status: 200, body: report };
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : "Canl\u0131 veri al\u0131namad\u0131";
     return { status: 502, body: { error: message } };

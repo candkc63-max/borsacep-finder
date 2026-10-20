@@ -22,6 +22,7 @@ import {
   type TabId,
   type Universe,
 } from "@/screener/model";
+import { coverageSummary, coverageText, LICENSE_NOTE } from "@/screener/coverage";
 import { closedBars, snapshotFromBars, type ScreenInterval, type TechnicalSnapshot } from "@/screener/snapshot";
 import {
   FAV_KEY,
@@ -84,8 +85,9 @@ function textOf(row: ScreenerRow, id: string) {
   if (id === "ticker") return row.ticker;
   if (id === "name") return row.name;
   if (id === "sector") return row.sector;
-  if (id === "index") return row.indexes.join(", ");
-  if (id === "market") return row.market ?? "";
+  if (id === "index") return row.indexes.length ? row.indexes.join(", ") : "doğrulanmadı";
+  if (id === "market") return row.market ?? "veri yok";
+  if (id === "coverage") return coverageText(row);
   return "";
 }
 
@@ -104,6 +106,7 @@ function tone(value: number | null) {
 }
 
 function defaultWidth(id: string) {
+  if (id === "coverage") return 280;
   if (id === "name" || id === "sector") return 168;
   if (id === "ticker") return 96;
   if (id === "changeDay" || id === "earningsGrowth" || id === "revenueGrowth" || id === "dividendYield") return 132;
@@ -129,6 +132,7 @@ function Cell({ row, column }: { row: ScreenerRow; column: ColumnDef }) {
 }
 
 function resolve(row: ScreenerRow, id: string): number | null {
+  if (row.dataStatus === "missing") return null;
   if (id === "price") return row.price;
   if (id === "changeDay") return row.changeDay;
   if (id === "volume") return row.volume;
@@ -226,6 +230,8 @@ export function Screener({
   }, [draft.rules, draft.search, draft.universe, draft.sortKey, draft.sortDesc, draft.tab, draft.interval, tickerKey]);
 
   const rows = useMemo(() => stocks.map((stock) => toScreenerRow(stock, tech[stock.ticker] ?? null)), [stocks, tech]);
+  const summary = coverageSummary(rows);
+  const membershipBlocked = (draft.universe === "bist100" || draft.universe === "bist50") && rows.every((row) => row.indexes.length === 0);
   const filtered = useMemo(() => applyScreen(rows, {
     rules: draft.rules,
     search: draft.search,
@@ -373,7 +379,7 @@ export function Screener({
         <div style={{ marginRight: "auto" }}>
           <div style={{ fontSize: 11, letterSpacing: "0.16em", color: "#9a9a9a" }}>BORSA101</div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 650 }}>Hisse Filtreleme</h1>
-          <div style={{ color: "#9a9a9a", fontSize: 12 }}>{paged.total} / {rows.length} hisse · {sourceLabel}{techNote ? ` · ${techNote}` : ""}</div>
+          <div data-testid="screen-coverage" style={{ color: "#9a9a9a", fontSize: 12 }}>{paged.total} listelenen · {summary.scanned} tarandı · {summary.missing} eksik · {summary.sample} örnek · evren {summary.universe} · {sourceLabel}{techNote ? ` · ${techNote}` : ""}</div>
         </div>
         <select data-testid="screen-saved" aria-label="Kaydedilmiş filtre" value={savedId ?? ""} onChange={(event) => openSaved(event.target.value)} style={fieldStyle}>
           <option value="">Kaydedilmiş filtre</option>
@@ -395,7 +401,7 @@ export function Screener({
         </label>
         <label>Evren
           <select data-testid="screen-universe" aria-label="Evren" value={draft.universe} onChange={(event) => patch({ universe: event.target.value as Universe })} style={{ ...fieldStyle, marginLeft: 6 }}>
-            <option value="all">BIST Tümü</option>
+            <option value="all">Örnek liste</option>
             <option value="bist100">BIST 100</option>
             <option value="bist50">BIST 50</option>
             <option value="watch">İzleme Listesi</option>
@@ -453,9 +459,10 @@ export function Screener({
         {!draft.rules.length && <span style={{ color: "#9a9a9a" }}>Filtre yok. Hazır bir set seçebilir veya filtre ekleyebilirsin.</span>}
       </div>
       <p style={{ margin: "0 12px 8px", color: "#8d8d8d", fontSize: 12 }}>
-        Kayıtlar yalnız bu tarayıcıda durur. Eksik alan — kalır, uydurma değer yazılmaz. Pazar türü bu listede yok. BIST 100 ve BIST 50 yerel etikettir, canlı endeks bileşimi değildir.
+        Kayıtlar yalnız bu tarayıcıda durur. Eksik alan — kalır ve başarılı tarama sayılmaz. Pazar türü bu listede yok. {LICENSE_NOTE}
         {needsBars ? " Teknik koşullar kapanmış mum ister." : ""}
       </p>
+      {membershipBlocked && <p data-testid="screen-membership" style={{ margin: "0 12px 8px", color: "#f5c542" }}>BIST 100 ve BIST 50 üyeliği doğrulanmış bir kaynaktan gelmediği için liste boş. Tahmini etiket kullanılmıyor.</p>}
 
       <div role="tablist" style={{ display: "flex", gap: 2, padding: "0 12px", overflowX: "auto", borderBottom: "1px solid #2c2c2c" }}>
         {TABS.map((tab) => (

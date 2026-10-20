@@ -1,5 +1,6 @@
 import type { Stock } from "@/data/stocks";
-import { indexesFor } from "@/screener/membership";
+import { missingLabels, type DataStatus } from "@/screener/coverage";
+import { indexesFor, type MembershipBook } from "@/screener/membership";
 import { brokePriorHigh, brokeRecord, type TechnicalSnapshot } from "@/screener/snapshot";
 
 export type Operator = "gt" | "lt" | "eq" | "gte" | "lte" | "between" | "above" | "below" | "cross-up" | "cross-down" | "near" | "breaks";
@@ -132,31 +133,41 @@ export type ScreenerRow = {
   indexes: string[];
   market: string | null;
   technical: TechnicalSnapshot | null;
+  dataStatus: DataStatus;
+  dataSource: string;
+  dataAsOf: string | null;
+  missing: string[];
 };
 
-export function toScreenerRow(stock: Stock, technical: TechnicalSnapshot | null = null): ScreenerRow {
+export function toScreenerRow(stock: Stock, technical: TechnicalSnapshot | null = null, book: MembershipBook | null = null): ScreenerRow {
+  const dataStatus = stock.dataStatus ?? "sample";
+  const missingQuote = dataStatus === "missing";
   return {
     ticker: stock.ticker,
     name: stock.name,
     sector: stock.sector,
-    price: stock.price,
-    marketCap: stock.marketCap,
-    pe: stock.pe,
-    pb: stock.pb,
-    roe: stock.roe,
-    dividendYield: stock.dividendYield,
-    change1y: stock.change1y,
-    changeDay: numberOrNull(stock.changeDay),
-    volume: numberOrNull(stock.volume),
-    averageVolume: numberOrNull(stock.averageVolume),
-    relativeVolume: technical?.relativeVolume ?? numberOrNull(stock.relativeVolume),
-    eps: numberOrNull(stock.eps),
-    earningsGrowth: numberOrNull(stock.earningsGrowth),
-    revenueGrowth: numberOrNull(stock.revenueGrowth),
-    week52Distance: technical?.week52Distance ?? numberOrNull(stock.week52Distance),
-    indexes: indexesFor(stock.ticker),
+    price: missingQuote ? 0 : stock.price,
+    marketCap: missingQuote ? 0 : stock.marketCap,
+    pe: missingQuote ? null : stock.pe,
+    pb: missingQuote ? null : stock.pb,
+    roe: missingQuote ? null : stock.roe,
+    dividendYield: missingQuote ? null : stock.dividendYield,
+    change1y: missingQuote ? null : stock.change1y,
+    changeDay: missingQuote ? null : numberOrNull(stock.changeDay),
+    volume: missingQuote ? null : numberOrNull(stock.volume),
+    averageVolume: missingQuote ? null : numberOrNull(stock.averageVolume),
+    relativeVolume: missingQuote ? null : technical?.relativeVolume ?? numberOrNull(stock.relativeVolume),
+    eps: missingQuote ? null : numberOrNull(stock.eps),
+    earningsGrowth: missingQuote ? null : numberOrNull(stock.earningsGrowth),
+    revenueGrowth: missingQuote ? null : numberOrNull(stock.revenueGrowth),
+    week52Distance: missingQuote ? null : technical?.week52Distance ?? numberOrNull(stock.week52Distance),
+    indexes: indexesFor(stock.ticker, book),
     market: null,
-    technical,
+    technical: missingQuote ? null : technical,
+    dataStatus,
+    dataSource: stock.dataSource ?? (dataStatus === "sample" ? "Örnek liste" : "Yahoo Finance"),
+    dataAsOf: stock.dataAsOf ?? null,
+    missing: missingLabels(stock, technical != null),
   };
 }
 
@@ -177,6 +188,7 @@ function techNumber(row: ScreenerRow, key: keyof TechnicalSnapshot): number | nu
 }
 
 export function numberValue(row: ScreenerRow, id: string): number | null {
+  if (row.dataStatus === "missing") return null;
   switch (id) {
     case "price": return row.price;
     case "changeDay": return row.changeDay;
@@ -336,6 +348,7 @@ function sortValue(row: ScreenerRow, key: string): number | string | null {
   if (key === "sector") return row.sector;
   if (key === "index") return row.indexes.join(", ");
   if (key === "market") return row.market;
+  if (key === "coverage") return row.dataStatus;
   return numberValue(row, key);
 }
 
@@ -416,6 +429,7 @@ export const COLUMNS: ColumnDef[] = [
   { id: "averageVolume", label: "Ortalama hacim", align: "right", kind: "volume" },
   { id: "index", label: "Endeks", align: "left", kind: "text" },
   { id: "market", label: "Pazar türü", align: "left", kind: "text" },
+  { id: "coverage", label: "Veri durumu", align: "left", kind: "text" },
 ];
 
 const COLUMN_MAP = new Map(COLUMNS.map((column) => [column.id, column]));
@@ -434,7 +448,7 @@ export const TABS: { id: TabId; label: string }[] = [
 ];
 
 export const TAB_COLUMNS: Record<TabId, string[]> = {
-  overview: ["ticker", "name", "price", "changeDay", "volume", "relativeVolume", "marketCap", "pe", "eps", "sector"],
+  overview: ["ticker", "name", "price", "changeDay", "volume", "relativeVolume", "marketCap", "pe", "eps", "sector", "index", "coverage"],
   performance: ["ticker", "name", "price", "changeDay", "barChange", "change1y", "week52Distance", "relativeVolume"],
   technical: ["ticker", "name", "price", "ema20", "ema50", "ema200", "rsi", "adx", "macd"],
   valuation: ["ticker", "name", "price", "marketCap", "pe", "pb", "eps"],
@@ -448,6 +462,10 @@ export function visibleColumns(tab: TabId, custom: string[] | null): ColumnDef[]
   if (!columns.some((column) => column.id === "ticker")) {
     const ticker = columnById("ticker");
     if (ticker) columns.unshift(ticker);
+  }
+  if (!columns.some((column) => column.id === "coverage")) {
+    const coverage = columnById("coverage");
+    if (coverage) columns.push(coverage);
   }
   return columns;
 }

@@ -3,8 +3,8 @@ import { send, type NodeRes } from "./nodeRes";
 
 async function load() {
   try {
-    const stocks = await loadLiveQuotes();
-    return { status: 200, body: { source: "yahoo", asOf: new Date().toISOString(), stocks } };
+    const report = await loadLiveQuotes();
+    return { status: 200, body: report };
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : "Canlı veri alınamadı";
     return { status: 502, body: { error: message } };

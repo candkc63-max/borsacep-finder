@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CandlestickChart } from "@/grafik/CandlestickChart";
 import { STOCKS, type Stock } from "@/data/stocks";
 import { chartHash, isChartHash } from "@/screener/chartLink";
+import { mergeScan, QUOTE_CACHE_TTL, readQuoteCache, writeQuoteCache } from "@/screener/coverage";
 import { Screener } from "@/screener/Screener";
 
 export default function App() {
@@ -24,7 +25,9 @@ export default function App() {
       .then((response) => (response.ok ? response.json() : Promise.reject()))
       .then((body: { stocks?: Stock[]; asOf?: string }) => {
         if (cancel || !body.stocks?.length) return;
-        setStocks(body.stocks);
+        const merged = mergeScan(STOCKS, body.stocks, readQuoteCache(sessionStorage), Date.now(), QUOTE_CACHE_TTL);
+        writeQuoteCache(merged.cache, sessionStorage);
+        setStocks(merged.stocks);
         setSource("yahoo");
         setAsOf(body.asOf ?? null);
       })

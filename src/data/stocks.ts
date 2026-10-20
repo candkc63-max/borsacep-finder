@@ -18,6 +18,9 @@ export type Stock = {
   revenueGrowth?: number | null;
   week52High?: number | null;
   week52Distance?: number | null;
+  dataSource?: string;
+  dataAsOf?: string | null;
+  dataStatus?: "sample" | "ok" | "missing";
 };
 
 export type StockFilter = {
