@@ -76,6 +76,17 @@ describe("screener screen", () => {
     expect(screen.getByTestId("col-resize-ticker")).toBeInTheDocument();
   });
 
+  it("shows sample coverage and refuses unverified index universes", () => {
+    renderScreen();
+    expect(screen.getByTestId("screen-coverage").textContent).toContain("0 tarandı");
+    expect(screen.getByTestId("screen-coverage").textContent).toContain("4 örnek");
+    expect(screen.getAllByText("Örnek liste · canlı kotasyon yok").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Evren"), { target: { value: "bist100" } });
+    expect(screen.getByTestId("screen-membership")).toHaveTextContent("doğrulanmış");
+    expect(screen.getByTestId("screen-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-row-THYAO")).not.toBeInTheDocument();
+  });
+
   it("opens the chart and keeps a watchlist", () => {
     const onOpen = renderScreen();
     fireEvent.click(screen.getByTestId("screen-row-THYAO"));

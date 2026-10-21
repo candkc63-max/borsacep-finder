@@ -45,9 +45,9 @@ export default defineConfig(({ mode }) => {
             }
             if (path !== "/api/bist-quotes") return next();
             try {
-              const stocks = await loadLiveQuotes();
+              const report = await loadLiveQuotes();
               res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ source: "yahoo", asOf: new Date().toISOString(), stocks }));
+              res.end(JSON.stringify(report));
             } catch {
               res.statusCode = 502;
               res.setHeader("content-type", "application/json");

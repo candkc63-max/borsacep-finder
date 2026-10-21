@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { Stock } from "@/data/stocks";
 import { formatCap } from "@/data/stocks";
+import { BrandMark, QuickField, ScreenField } from "@/screener/chrome";
 import {
   COLUMNS,
   FIELDS,
@@ -22,6 +23,7 @@ import {
   type TabId,
   type Universe,
 } from "@/screener/model";
+import { coverageSummary, coverageText, LICENSE_NOTE } from "@/screener/coverage";
 import { closedBars, snapshotFromBars, type ScreenInterval, type TechnicalSnapshot } from "@/screener/snapshot";
 import {
   FAV_KEY,
@@ -35,6 +37,7 @@ import {
   writeTickers,
   type SavedScreen,
 } from "@/screener/store";
+import "./screener.css";
 
 type Draft = {
   name: string;
@@ -60,32 +63,23 @@ const EMPTY: Draft = {
   search: "",
 };
 
-const fieldStyle: CSSProperties = {
-  height: 30,
-  borderRadius: 6,
-  border: "1px solid #2c2c2c",
-  background: "#101010",
-  color: "#f2f2f2",
-  padding: "0 8px",
-  font: "12px/1 ui-sans-serif, system-ui, sans-serif",
-};
+const QUICK_NUMBERS = [
+  { id: "price", label: "Fiyat >", aria: "Fiyat eşiği" },
+  { id: "volume", label: "Hacim >", aria: "Hacim eşiği" },
+  { id: "marketCap", label: "Piyasa değeri >", aria: "Piyasa değeri eşiği" },
+  { id: "relativeVolume", label: "Göreceli hacim >", aria: "Göreceli hacim eşiği" },
+  { id: "rsi", label: "RSI >", aria: "RSI eşiği" },
+] as const;
 
-const buttonStyle: CSSProperties = {
-  height: 30,
-  borderRadius: 6,
-  border: "1px solid #3a3a3a",
-  background: "#161616",
-  color: "#f2f2f2",
-  padding: "0 10px",
-  cursor: "pointer",
-};
+const QUICK_TECH = FIELDS.filter((item) => item.group === "Teknik" || item.group === "Olay");
 
 function textOf(row: ScreenerRow, id: string) {
   if (id === "ticker") return row.ticker;
   if (id === "name") return row.name;
   if (id === "sector") return row.sector;
-  if (id === "index") return row.indexes.join(", ");
-  if (id === "market") return row.market ?? "";
+  if (id === "index") return row.indexes.length ? row.indexes.join(", ") : "doğrulanmadı";
+  if (id === "market") return row.market ?? "veri yok";
+  if (id === "coverage") return coverageText(row);
   return "";
 }
 
@@ -98,37 +92,45 @@ function plain(value: number, digits = 2) {
   return value.toLocaleString("tr-TR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-function tone(value: number | null) {
-  if (value == null || value === 0) return "#d0d0d0";
-  return value > 0 ? "#16c47a" : "#e10600";
+function toneClass(value: number | null) {
+  if (value == null || value === 0) return "tone-flat";
+  return value > 0 ? "tone-up" : "tone-down";
 }
 
 function defaultWidth(id: string) {
-  if (id === "name" || id === "sector") return 168;
-  if (id === "ticker") return 96;
-  if (id === "changeDay" || id === "earningsGrowth" || id === "revenueGrowth" || id === "dividendYield") return 132;
-  return 112;
+  if (id === "ticker") return 248;
+  if (id === "coverage") return 220;
+  if (id === "sector") return 132;
+  if (id === "pe" || id === "eps" || id === "pb") return 84;
+  if (id === "changeDay" || id === "earningsGrowth" || id === "revenueGrowth" || id === "dividendYield") return 124;
+  return 108;
+}
+
+function tabLabel(id: TabId, label: string) {
+  return id === "profit" ? "Kârlılık" : label;
 }
 
 function Cell({ row, column }: { row: ScreenerRow; column: ColumnDef }) {
   if (column.kind === "text") {
     const text = textOf(row, column.id);
-    return <span title={text || "veri yok"}>{text || "—"}</span>;
+    return <span className={column.id === "coverage" ? "clip" : undefined} title={text || "veri yok"}>{text || "—"}</span>;
   }
   const resolved = resolve(row, column.id);
   if (resolved == null || (column.id === "price" && resolved === 0)) return <span title="veri yok">—</span>;
-  if (column.kind === "pct") return <span style={{ color: tone(resolved) }}>{signed(resolved)}</span>;
+  if (column.kind === "pct") return <span className={toneClass(resolved)}>{signed(resolved)}</span>;
   if (column.kind === "percent") return <span>{`${plain(resolved)}%`}</span>;
   if (column.kind === "price") {
     const up = column.id === "supertrend" ? row.technical?.supertrendUp : null;
-    return <span style={{ color: up == null ? "#f2f2f2" : up ? "#16c47a" : "#e10600" }}>{plain(resolved)}</span>;
+    const tone = up == null ? undefined : up ? "tone-up" : "tone-down";
+    return <span className={tone}>{plain(resolved)}</span>;
   }
   if (column.kind === "volume" || column.kind === "cap") return <span>{formatCap(resolved)}</span>;
   if (column.kind === "rel") return <span>{`${plain(resolved)}x`}</span>;
-  return <span>{plain(resolved)}</span>;
+  return <span className={resolved < 0 ? "tone-down" : undefined}>{plain(resolved)}</span>;
 }
 
 function resolve(row: ScreenerRow, id: string): number | null {
+  if (row.dataStatus === "missing") return null;
   if (id === "price") return row.price;
   if (id === "changeDay") return row.changeDay;
   if (id === "volume") return row.volume;
@@ -172,6 +174,7 @@ export function Screener({
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [more, setMore] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const ruleSeq = useRef(1);
 
   const tickerKey = stocks.map((stock) => stock.ticker).join(",");
@@ -226,6 +229,8 @@ export function Screener({
   }, [draft.rules, draft.search, draft.universe, draft.sortKey, draft.sortDesc, draft.tab, draft.interval, tickerKey]);
 
   const rows = useMemo(() => stocks.map((stock) => toScreenerRow(stock, tech[stock.ticker] ?? null)), [stocks, tech]);
+  const summary = coverageSummary(rows);
+  const membershipBlocked = (draft.universe === "bist100" || draft.universe === "bist50") && rows.every((row) => row.indexes.length === 0);
   const filtered = useMemo(() => applyScreen(rows, {
     rules: draft.rules,
     search: draft.search,
@@ -236,6 +241,8 @@ export function Screener({
   }), [rows, draft, watch]);
   const paged = pageOf(filtered, page, pageSize);
   const columns = visibleColumns(draft.tab, draft.columns);
+  const showName = columns.some((column) => column.id === "name");
+  const tableColumns = columns.filter((column) => column.id !== "name");
   const needsBars = draft.rules.some(ruleNeedsBars);
   const addFields = more ? FIELDS : FIELDS.filter((item) => item.primary);
 
@@ -259,6 +266,29 @@ export function Screener({
     const field = addFields[0] ?? FIELDS[0];
     ruleSeq.current += 1;
     patch({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: field.id, op: field.ops[0], value: "", valueTo: "" }] });
+  }
+
+  function addField(fieldId: string) {
+    const field = fieldById(fieldId);
+    if (!field) return;
+    ruleSeq.current += 1;
+    patch({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: field.id, op: field.ops[0], value: "", valueTo: "" }] });
+  }
+
+  function setQuick(fieldId: string, value: string) {
+    const existing = draft.rules.find((rule) => rule.field === fieldId);
+    if (!value.trim()) {
+      if (existing) patch({ rules: draft.rules.filter((rule) => rule.id !== existing.id) });
+      return;
+    }
+    if (existing) {
+      updateRule(existing.id, { value });
+      return;
+    }
+    const field = fieldById(fieldId);
+    if (!field) return;
+    ruleSeq.current += 1;
+    patch({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: fieldId, op: "gt", value, valueTo: "" }] });
   }
 
   function applyPreset(id: string) {
@@ -367,106 +397,163 @@ export function Screener({
     writeTickers(key, next);
   }
 
+  function quickValue(fieldId: string) {
+    return draft.rules.find((rule) => rule.field === fieldId)?.value ?? "";
+  }
+
   return (
-    <div data-testid="screener" style={{ minHeight: "100vh", background: "#000", color: "#f2f2f2", font: "13px/1.4 ui-sans-serif, system-ui, sans-serif" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "10px 12px", borderBottom: "1px solid #2c2c2c" }}>
-        <div style={{ marginRight: "auto" }}>
-          <div style={{ fontSize: 11, letterSpacing: "0.16em", color: "#9a9a9a" }}>BORSA101</div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 650 }}>Hisse Filtreleme</h1>
-          <div style={{ color: "#9a9a9a", fontSize: 12 }}>{paged.total} / {rows.length} hisse · {sourceLabel}{techNote ? ` · ${techNote}` : ""}</div>
+    <div data-testid="screener" className="screen">
+      <header className="screen-head">
+        <div className="head-row">
+        <div className="brand">
+          <BrandMark />
+          <div className="brand-text">
+            <span className="brand-name">Borsa101</span>
+            <h1>Hisse Filtreleme</h1>
+          </div>
         </div>
-        <select data-testid="screen-saved" aria-label="Kaydedilmiş filtre" value={savedId ?? ""} onChange={(event) => openSaved(event.target.value)} style={fieldStyle}>
-          <option value="">Kaydedilmiş filtre</option>
-          {screens.map((screen) => <option key={screen.id} value={screen.id}>{screen.name}</option>)}
-        </select>
-        <input data-testid="screen-name" aria-label="Filtre adı" value={draft.name} placeholder="Filtre adı" onChange={(event) => patch({ name: event.target.value })} style={{ ...fieldStyle, width: 180 }} />
-        <button type="button" data-testid="screen-new" onClick={() => { setSavedId(null); patch({ name: "", rules: [], columns: null, tab: "overview", sortKey: "marketCap", sortDesc: true }); }} style={buttonStyle}>Yeni filtre</button>
-        <button type="button" data-testid="screen-save" onClick={save} disabled={!draft.name.trim()} style={{ ...buttonStyle, opacity: draft.name.trim() ? 1 : 0.45 }}>Kaydet</button>
-        <button type="button" data-testid="screen-copy" onClick={copyScreen} style={buttonStyle}>Kopyala</button>
-        <button type="button" data-testid="screen-delete" onClick={removeScreen} disabled={!savedId} style={{ ...buttonStyle, opacity: savedId ? 1 : 0.45 }}>Sil</button>
-        <a href="#grafik" style={{ color: "#d0d0d0" }}>Grafik</a>
+        <div className="actions">
+          <select data-testid="screen-saved" className="ctrl saved-select" aria-label="Kaydedilmiş filtre" value={savedId ?? ""} onChange={(event) => openSaved(event.target.value)}>
+            <option value="">Kaydedilmiş filtre</option>
+            {screens.map((screen) => <option key={screen.id} value={screen.id}>{screen.name}</option>)}
+          </select>
+          <input data-testid="screen-name" className="ctrl name-input" aria-label="Filtre adı" value={draft.name} placeholder="Filtre adı" onChange={(event) => patch({ name: event.target.value })} />
+          <button type="button" className="btn" data-testid="screen-new" onClick={() => { setSavedId(null); patch({ name: "", rules: [], columns: null, tab: "overview", sortKey: "marketCap", sortDesc: true }); }}>Yeni filtre</button>
+          <button type="button" className="btn" data-testid="screen-save" onClick={save} disabled={!draft.name.trim()}>Kaydet</button>
+          <button type="button" className="btn" data-testid="screen-copy" onClick={copyScreen}>Kopyala</button>
+          <button type="button" className="btn" data-testid="screen-delete" onClick={removeScreen} disabled={!savedId}>Sil</button>
+          <button type="button" className={`btn${infoOpen ? " is-on" : ""}`} aria-expanded={infoOpen} aria-label="Veri ve kayıt notu" onClick={() => setInfoOpen((value) => !value)}>Bilgi</button>
+          <a className="btn" href="#grafik">Grafik</a>
+          {infoOpen && (
+            <div className="info-pop" role="note">
+              <p>Kayıtlar yalnız bu tarayıcıda durur. Eksik alan — kalır ve başarılı tarama sayılmaz. Pazar türü bu listede yok. {LICENSE_NOTE}</p>
+              {needsBars && <p>Teknik koşullar kapanmış mum ister.</p>}
+              {techNote && <p>{techNote}</p>}
+            </div>
+          )}
+        </div>
+        </div>
+        <p data-testid="screen-coverage" className="meta">
+          {summary.scanned} tarandı · {summary.missing} eksik · {summary.sample} örnek · {paged.total} listelenen · evren {summary.universe} · {sourceLabel}
+        </p>
+      </header>
+
+      <section className="filters">
+        <div className="row">
+          <ScreenField label="Piyasa">
+            <select className="ctrl" aria-label="Piyasa" value="TR" onChange={() => undefined}>
+              <option value="TR">TR</option>
+            </select>
+          </ScreenField>
+          <ScreenField label="Evren">
+            <select data-testid="screen-universe" className="ctrl" aria-label="Evren" value={draft.universe} onChange={(event) => patch({ universe: event.target.value as Universe })}>
+              <option value="all">Örnek liste</option>
+              <option value="bist100">BIST 100</option>
+              <option value="bist50">BIST 50</option>
+              <option value="watch">İzleme Listesi</option>
+            </select>
+          </ScreenField>
+          <ScreenField label="Zaman dilimi">
+            <select data-testid="screen-interval" className="ctrl" aria-label="Zaman dilimi" value={draft.interval} onChange={(event) => patch({ interval: event.target.value as ScreenInterval })}>
+              <option value="1d">Günlük</option>
+              <option value="1wk">Haftalık</option>
+              <option value="4h">4s</option>
+              <option value="1h">1s</option>
+            </select>
+          </ScreenField>
+          <ScreenField label="Hazır filtre">
+            <select data-testid="screen-preset" className="ctrl" aria-label="Hazır filtre" value="" onChange={(event) => applyPreset(event.target.value)}>
+              <option value="">Seç</option>
+              {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+            </select>
+          </ScreenField>
+        </div>
+
+        <div className="row">
+          {QUICK_NUMBERS.map((item) => (
+            <QuickField key={item.id} label={item.label}>
+              <input
+                className={`ctrl${quickValue(item.id) ? " is-active" : ""}`}
+                aria-label={item.aria}
+                inputMode="decimal"
+                value={quickValue(item.id)}
+                placeholder="değer"
+                onChange={(event) => setQuick(item.id, event.target.value)}
+              />
+            </QuickField>
+          ))}
+          <QuickField label="Teknik gösterge">
+            <select className="ctrl" aria-label="Teknik gösterge" value="" onChange={(event) => { if (event.target.value) addField(event.target.value); }}>
+              <option value="">Ekle</option>
+              {QUICK_TECH.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          </QuickField>
+          <div className="row-actions">
+            <button type="button" className="btn" data-testid="screen-add-filter" onClick={addRule}>Filtre ekle</button>
+            <button type="button" className="btn" data-testid="screen-clear" onClick={() => { setSavedId(null); patch({ rules: [], name: "", columns: null }); }}>Filtreleri temizle</button>
+            <button type="button" className={`btn${more ? " is-on" : ""}`} data-testid="screen-more" onClick={() => setMore((value) => !value)}>{more ? "Az filtre" : "Daha fazla filtre"}</button>
+          </div>
+        </div>
+
+        {draft.rules.length > 0 && (
+          <div className="chips">
+            {draft.rules.map((rule) => {
+              const field = fieldById(rule.field);
+              const options = field ? categoryOptions(field.id, rows) : [];
+              const choices = FIELDS.filter((item) => more || item.primary || item.id === rule.field);
+              return (
+                <div key={rule.id} data-testid="filter-chip" className="chip">
+                  <select className="ctrl" aria-label="Alan" value={rule.field} onChange={(event) => updateRule(rule.id, { field: event.target.value })}>
+                    {choices.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                  </select>
+                  <select className="ctrl" aria-label="Operatör" value={rule.op} onChange={(event) => updateRule(rule.id, { op: event.target.value as Operator })}>
+                    {(field?.ops ?? []).map((op) => <option key={op} value={op}>{operatorLabel(op)}</option>)}
+                  </select>
+                  {field?.kind === "category" ? (
+                    <select className="ctrl" aria-label={`${field.label} değeri`} value={rule.value} onChange={(event) => updateRule(rule.id, { value: event.target.value })}>
+                      <option value="">{options.length ? "Seç" : "veri yok"}</option>
+                      {options.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  ) : field && field.kind !== "flag" && field.kind !== "cross" ? (
+                    <>
+                      <input className="ctrl value" aria-label={`${field.label} değeri`} value={rule.value} onChange={(event) => updateRule(rule.id, { value: event.target.value })} />
+                      {rule.op === "between" && <input className="ctrl value" aria-label={`${field.label} üst değer`} value={rule.valueTo} onChange={(event) => updateRule(rule.id, { valueTo: event.target.value })} />}
+                    </>
+                  ) : null}
+                  <button type="button" className="btn chip-remove" data-testid={`filter-remove-${rule.id}`} aria-label="Filtreyi sil" onClick={() => patch({ rules: draft.rules.filter((item) => item.id !== rule.id) })}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {membershipBlocked && <p data-testid="screen-membership" className="note-banner">BIST 100 ve BIST 50 üyeliği doğrulanmış bir kaynaktan gelmediği için liste boş. Tahmini etiket kullanılmıyor.</p>}
+      </section>
+
+      <div role="tablist" className="tabs">
+        {TABS.map((tab) => (
+          <button key={tab.id} type="button" role="tab" className="tab" aria-selected={draft.tab === tab.id} data-testid={`screen-tab-${tab.id}`} onClick={() => patch({ tab: tab.id, columns: null })}>{tabLabel(tab.id, tab.label)}</button>
+        ))}
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", overflowX: "auto", borderBottom: "1px solid #2c2c2c" }}>
-        <label>Piyasa
-          <select aria-label="Piyasa" value="TR" style={{ ...fieldStyle, marginLeft: 6 }} onChange={() => undefined}>
-            <option value="TR">TR</option>
-          </select>
-        </label>
-        <label>Evren
-          <select data-testid="screen-universe" aria-label="Evren" value={draft.universe} onChange={(event) => patch({ universe: event.target.value as Universe })} style={{ ...fieldStyle, marginLeft: 6 }}>
-            <option value="all">BIST Tümü</option>
-            <option value="bist100">BIST 100</option>
-            <option value="bist50">BIST 50</option>
-            <option value="watch">İzleme Listesi</option>
-          </select>
-        </label>
-        <label>Zaman
-          <select data-testid="screen-interval" aria-label="Zaman dilimi" value={draft.interval} onChange={(event) => patch({ interval: event.target.value as ScreenInterval })} style={{ ...fieldStyle, marginLeft: 6 }}>
-            <option value="1d">Günlük</option>
-            <option value="1wk">Haftalık</option>
-            <option value="4h">4s</option>
-            <option value="1h">1s</option>
-          </select>
-        </label>
-        <label>Sıra
-          <select data-testid="screen-sort" aria-label="Sıralama" value={draft.sortKey} onChange={(event) => patch({ sortKey: event.target.value, sortDesc: event.target.value !== "ticker" && event.target.value !== "name" })} style={{ ...fieldStyle, marginLeft: 6 }}>
+      <div className="toolbar">
+        <input data-testid="screen-search" className="ctrl search" aria-label="Hisse ara" value={draft.search} placeholder="Sembol veya şirket" onChange={(event) => patch({ search: event.target.value })} />
+        <span className="count">{paged.total} hisse</span>
+        <div className="pager">
+          <button type="button" className="btn" data-testid="screen-page-prev" disabled={paged.page <= 1} onClick={() => setPage((value) => value - 1)}>Önceki</button>
+          <span className="page-label">{paged.page} / {paged.pages}</span>
+          <button type="button" className="btn" data-testid="screen-page-next" disabled={paged.page >= paged.pages} onClick={() => setPage((value) => value + 1)}>Sonraki</button>
+        </div>
+        <div className="toolbar-end">
+          <select data-testid="screen-sort" className="ctrl sort-field" aria-label="Sıralama" value={draft.sortKey} onChange={(event) => patch({ sortKey: event.target.value, sortDesc: event.target.value !== "ticker" && event.target.value !== "name" })}>
             {COLUMNS.map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}
           </select>
-        </label>
-        <select data-testid="screen-preset" aria-label="Hazır filtre" value="" onChange={(event) => applyPreset(event.target.value)} style={fieldStyle}>
-          <option value="">Hazır filtre</option>
-          {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-        </select>
-        <button type="button" data-testid="screen-add-filter" onClick={addRule} style={buttonStyle}>Filtre ekle</button>
-        <button type="button" data-testid="screen-clear" onClick={() => { setSavedId(null); patch({ rules: [], name: "", columns: null }); }} style={buttonStyle}>Filtreleri temizle</button>
-        <button type="button" data-testid="screen-more" onClick={() => setMore((value) => !value)} style={{ ...buttonStyle, color: more ? "#f5c542" : "#f2f2f2" }}>{more ? "Az filtre" : "Daha fazla filtre"}</button>
-      </div>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 12px", alignItems: "center" }}>
-        {draft.rules.map((rule) => {
-          const field = fieldById(rule.field);
-          const options = field ? categoryOptions(field.id, rows) : [];
-          return (
-            <div key={rule.id} data-testid="filter-chip" style={{ display: "flex", gap: 4, alignItems: "center", border: "1px solid #2c2c2c", background: "#141414", borderRadius: 999, padding: "2px 6px" }}>
-              <select aria-label="Alan" value={rule.field} onChange={(event) => updateRule(rule.id, { field: event.target.value })} style={fieldStyle}>
-                {FIELDS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-              </select>
-              <select aria-label="Operatör" value={rule.op} onChange={(event) => updateRule(rule.id, { op: event.target.value as Operator })} style={fieldStyle}>
-                {(field?.ops ?? []).map((op) => <option key={op} value={op}>{operatorLabel(op)}</option>)}
-              </select>
-              {field?.kind === "category" ? (
-                <select aria-label={`${field.label} değeri`} value={rule.value} onChange={(event) => updateRule(rule.id, { value: event.target.value })} style={fieldStyle}>
-                  <option value="">{options.length ? "Seç" : "veri yok"}</option>
-                  {options.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              ) : field && field.kind !== "flag" && field.kind !== "cross" ? (
-                <>
-                  <input aria-label={`${field.label} değeri`} value={rule.value} onChange={(event) => updateRule(rule.id, { value: event.target.value })} style={{ ...fieldStyle, width: 72 }} />
-                  {rule.op === "between" && <input aria-label={`${field.label} üst değer`} value={rule.valueTo} onChange={(event) => updateRule(rule.id, { valueTo: event.target.value })} style={{ ...fieldStyle, width: 72 }} />}
-                </>
-              ) : null}
-              <button type="button" data-testid={`filter-remove-${rule.id}`} aria-label="Filtreyi sil" onClick={() => patch({ rules: draft.rules.filter((item) => item.id !== rule.id) })} style={{ ...buttonStyle, border: 0, background: "transparent", color: "#9a9a9a" }}>×</button>
-            </div>
-          );
-        })}
-        {!draft.rules.length && <span style={{ color: "#9a9a9a" }}>Filtre yok. Hazır bir set seçebilir veya filtre ekleyebilirsin.</span>}
-      </div>
-      <p style={{ margin: "0 12px 8px", color: "#8d8d8d", fontSize: 12 }}>
-        Kayıtlar yalnız bu tarayıcıda durur. Eksik alan — kalır, uydurma değer yazılmaz. Pazar türü bu listede yok. BIST 100 ve BIST 50 yerel etikettir, canlı endeks bileşimi değildir.
-        {needsBars ? " Teknik koşullar kapanmış mum ister." : ""}
-      </p>
-
-      <div role="tablist" style={{ display: "flex", gap: 2, padding: "0 12px", overflowX: "auto", borderBottom: "1px solid #2c2c2c" }}>
-        {TABS.map((tab) => (
-          <button key={tab.id} type="button" role="tab" aria-selected={draft.tab === tab.id} data-testid={`screen-tab-${tab.id}`} onClick={() => patch({ tab: tab.id, columns: null })} style={{ height: 32, border: 0, borderBottom: draft.tab === tab.id ? "2px solid #f5c542" : "2px solid transparent", background: "transparent", color: draft.tab === tab.id ? "#f2f2f2" : "#9a9a9a", cursor: "pointer", whiteSpace: "nowrap" }}>{tab.label}</button>
-        ))}
-        <button type="button" data-testid="screen-columns" onClick={() => setColumnsOpen((value) => !value)} style={{ ...buttonStyle, marginLeft: "auto", marginBottom: 4 }}>Kolonlar</button>
+          <button type="button" className={`btn${columnsOpen ? " is-on" : ""}`} data-testid="screen-columns" onClick={() => setColumnsOpen((value) => !value)}>Kolonlar</button>
+        </div>
       </div>
       {columnsOpen && (
-        <div data-testid="screen-column-menu" style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 12px", borderBottom: "1px solid #2c2c2c" }}>
+        <div data-testid="screen-column-menu" className="column-menu">
           {COLUMNS.map((column) => (
-            <label key={column.id} style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <label key={column.id}>
               <input type="checkbox" aria-label={column.label} checked={columns.some((item) => item.id === column.id)} disabled={column.id === "ticker"} onChange={() => toggleColumn(column.id)} />
               {column.label}
             </label>
@@ -474,50 +561,51 @@ export function Screener({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, padding: "8px 12px", alignItems: "center" }}>
-        <input data-testid="screen-search" aria-label="Hisse ara" value={draft.search} placeholder="Sembol veya şirket" onChange={(event) => patch({ search: event.target.value })} style={{ ...fieldStyle, width: 220 }} />
-        {paged.pages > 1 && (
-          <>
-            <button type="button" data-testid="screen-page-prev" disabled={paged.page <= 1} onClick={() => setPage((value) => value - 1)} style={buttonStyle}>Önceki</button>
-            <span>{paged.page} / {paged.pages}</span>
-            <button type="button" data-testid="screen-page-next" disabled={paged.page >= paged.pages} onClick={() => setPage((value) => value + 1)} style={buttonStyle}>Sonraki</button>
-          </>
-        )}
-      </div>
-
-      <div data-testid="screen-table-wrap" data-scroll="x" style={{ overflowX: "auto", maxHeight: "calc(100vh - 280px)" }}>
-        <table style={{ borderCollapse: "collapse", minWidth: "100%", fontVariantNumeric: "tabular-nums" }}>
+      <div data-testid="screen-table-wrap" data-scroll="x" className="table-wrap">
+        <table className="screen-table">
           <thead>
             <tr>
-              <th style={{ width: 64, position: "sticky", top: 0, background: "#0c0c0c" }} />
-              {columns.map((column) => (
-                <th key={column.id} style={{ position: "sticky", top: 0, width: widths[column.id] ?? defaultWidth(column.id), background: "#0c0c0c", textAlign: column.align, padding: "6px 8px", borderBottom: "1px solid #2c2c2c", color: "#9a9a9a", fontWeight: 550 }}>
-                  <button type="button" aria-label={`Sırala ${column.label}`} onClick={() => patch({ sortKey: column.id, sortDesc: draft.sortKey === column.id ? !draft.sortDesc : column.align === "right" })} style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", font: "inherit" }}>
-                    {column.label}{draft.sortKey === column.id ? (draft.sortDesc ? " ↓" : " ↑") : ""}
-                  </button>
-                  <span data-testid={`col-resize-${column.id}`} onPointerDown={(event) => resize(column.id, event)} style={{ position: "absolute", right: 0, top: 0, width: 6, height: "100%", cursor: "col-resize" }} />
-                </th>
-              ))}
+              {tableColumns.map((column) => {
+                const sorted = draft.sortKey === column.id;
+                return (
+                  <th key={column.id} className={column.id === "ticker" ? "sym-col" : undefined} style={{ width: widths[column.id] ?? defaultWidth(column.id), textAlign: column.align }}>
+                    <button type="button" className={`sort-btn${sorted ? " is-sorted" : ""}`} aria-label={`Sırala ${column.label}`} onClick={() => patch({ sortKey: column.id, sortDesc: draft.sortKey === column.id ? !draft.sortDesc : column.align === "right" })} style={{ justifyContent: column.align === "right" ? "flex-end" : "flex-start" }}>
+                      {column.label}
+                      <span className="sort-mark" aria-hidden="true">{sorted ? (draft.sortDesc ? "↓" : "↑") : ""}</span>
+                    </button>
+                    <span data-testid={`col-resize-${column.id}`} className="resize" onPointerDown={(event) => resize(column.id, event)} />
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {paged.rows.map((row) => (
-              <tr key={row.ticker} data-testid={`screen-row-${row.ticker}`} onClick={() => onOpen(row.ticker, false)} style={{ cursor: "pointer", borderBottom: "1px solid #1c1c1c" }}>
-                <td style={{ padding: "4px 6px", whiteSpace: "nowrap" }} onClick={(event) => event.stopPropagation()}>
-                  <button type="button" data-testid={`screen-fav-${row.ticker}`} aria-label={`Favori ${row.ticker}`} aria-pressed={favs.includes(row.ticker)} onClick={() => mark(FAV_KEY, favs, row.ticker, setFavs)} style={{ ...buttonStyle, width: 24, padding: 0, color: favs.includes(row.ticker) ? "#f5c542" : "#777" }}>★</button>
-                  <button type="button" data-testid={`screen-watch-${row.ticker}`} aria-label={`İzleme ${row.ticker}`} aria-pressed={watch.includes(row.ticker)} onClick={() => mark(WATCH_KEY, watch, row.ticker, setWatch)} style={{ ...buttonStyle, width: 24, padding: 0, color: watch.includes(row.ticker) ? "#16c47a" : "#777" }}>●</button>
-                  <button type="button" data-testid={`screen-open-${row.ticker}`} aria-label={`Yeni sekmede ${row.ticker}`} onClick={() => onOpen(row.ticker, true)} style={{ ...buttonStyle, width: 24, padding: 0 }}>↗</button>
-                </td>
-                {columns.map((column) => (
-                  <td key={column.id} style={{ width: widths[column.id] ?? defaultWidth(column.id), textAlign: column.align, padding: "6px 8px", whiteSpace: "nowrap", fontWeight: column.id === "ticker" ? 650 : 450 }}>
-                    <Cell row={row} column={column} />
+              <tr key={row.ticker} data-testid={`screen-row-${row.ticker}`} onClick={() => onOpen(row.ticker, false)}>
+                {tableColumns.map((column) => (
+                  <td key={column.id} className={column.id === "ticker" ? "sym-col" : undefined} style={{ width: widths[column.id] ?? defaultWidth(column.id), textAlign: column.align }}>
+                    {column.id === "ticker" ? (
+                      <div className="sym">
+                        <span className="sym-actions" onClick={(event) => event.stopPropagation()}>
+                          <button type="button" className={`icon-btn${favs.includes(row.ticker) ? " is-fav" : ""}`} data-testid={`screen-fav-${row.ticker}`} aria-label={`Favori ${row.ticker}`} aria-pressed={favs.includes(row.ticker)} onClick={() => mark(FAV_KEY, favs, row.ticker, setFavs)}>★</button>
+                          <button type="button" className={`icon-btn${watch.includes(row.ticker) ? " is-watch" : ""}`} data-testid={`screen-watch-${row.ticker}`} aria-label={`İzleme ${row.ticker}`} aria-pressed={watch.includes(row.ticker)} onClick={() => mark(WATCH_KEY, watch, row.ticker, setWatch)}>●</button>
+                          <button type="button" className="icon-btn" data-testid={`screen-open-${row.ticker}`} aria-label={`Yeni sekmede ${row.ticker}`} onClick={() => onOpen(row.ticker, true)}>↗</button>
+                        </span>
+                        <span className="sym-text">
+                          <span className="sym-ticker">{row.ticker}</span>
+                          {showName && <span className="sym-name">{row.name}</span>}
+                        </span>
+                      </div>
+                    ) : (
+                      <Cell row={row} column={column} />
+                    )}
                   </td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
-        {filtered.length === 0 && <p data-testid="screen-empty" style={{ padding: 24, textAlign: "center", color: "#9a9a9a" }}>Bu filtreye uyan hisse yok.</p>}
+        {filtered.length === 0 && <p data-testid="screen-empty" className="empty">Bu filtreye uyan hisse yok.</p>}
       </div>
     </div>
   );

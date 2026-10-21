@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ema } from "../../chart/lib/indicators";
 import { STOCKS } from "@/data/stocks";
 import { chartHash, isChartHash, tickerFromHash } from "@/screener/chartLink";
-import { indexesFor } from "@/screener/membership";
+import { acceptMembership, indexesFor } from "@/screener/membership";
 import {
   PRESETS,
   applyScreen,
@@ -59,18 +59,20 @@ describe("screener engine", () => {
     expect(clampWidth(Number.NaN)).toBe(110);
   });
 
-  it("limits universe with the local index labels and a watchlist", () => {
+  it("does not invent index membership and only uses a verified book", () => {
     const rows = STOCKS.map((stock) => toScreenerRow(stock));
-    expect(indexesFor("GARAN")).toEqual(["BIST 100", "BIST 50"]);
-    expect(indexesFor("ULKER")).toEqual(["BIST 100"]);
-    expect(indexesFor("LOGO")).toEqual([]);
-    const bist50 = applyScreen(rows, query({ universe: "bist50" }));
-    expect(bist50.some((row) => row.ticker === "GARAN")).toBe(true);
-    expect(bist50.some((row) => row.ticker === "ULKER")).toBe(false);
+    expect(indexesFor("GARAN")).toEqual([]);
+    expect(indexesFor("ULKER")).toEqual([]);
+    expect(applyScreen(rows, query({ universe: "bist50" }))).toHaveLength(0);
+    expect(applyScreen(rows, query({ universe: "bist100" }))).toHaveLength(0);
+    const book = acceptMembership({ verified: true, source: "deneme kaydı", asOf: "2026-10-01T00:00:00Z", bist100: ["GARAN", "ULKER"], bist50: ["GARAN"] });
+    const tagged = STOCKS.map((stock) => toScreenerRow(stock, null, book));
+    expect(applyScreen(tagged, query({ universe: "bist50" })).map((row) => row.ticker)).toEqual(["GARAN"]);
+    expect(applyScreen(tagged, query({ universe: "bist100" })).map((row) => row.ticker).sort()).toEqual(["GARAN", "ULKER"]);
+    expect(acceptMembership({ verified: false, source: "tahmin", asOf: "2026-10-01", bist100: ["GARAN"], bist50: [] })).toBeNull();
     const watch = applyScreen(rows, query({ universe: "watch", watchlist: ["LOGO"] }));
     expect(watch.map((row) => row.ticker)).toEqual(["LOGO"]);
     expect(applyScreen(rows, query({ rules: [rule("market", "eq", "Yıldız")] }))).toHaveLength(0);
-    expect(applyScreen(rows, query({ rules: [rule("index", "eq", "BIST 100")] })).some((row) => row.ticker === "LOGO")).toBe(false);
   });
 
   it("uses closed bars for indicators and does not read the still-open bar", () => {
