@@ -1,6 +1,7 @@
 import { ema } from "./indicators";
 import type { TradeMark } from "./manualBacktest";
 import type { OhlcBar } from "./parseOhlcv";
+import { clipScaleTrade } from "./scalePlan";
 
 export type EmaCrossSpec = {
   fast: number;
@@ -25,6 +26,31 @@ export type ExitReason = "signal" | "stop" | "target" | "gap-stop" | "gap-target
 
 export type StopPoint = { index: number; stop: number };
 
+export type ScaleFill = {
+  seq: number;
+  index: number;
+  signalIndex: number;
+  price: number;
+  shares: number;
+  commission: number;
+  slippage: number;
+  reason: ExitReason | "entry" | "add";
+};
+
+export type ScaleTarget = {
+  profitPercent: number | null;
+  ratio: number;
+  price: number;
+  filledIndex: number | null;
+};
+
+export type ScaleLegs = {
+  entries: ScaleFill[];
+  exits: ScaleFill[];
+  targets: ScaleTarget[];
+  riskPath: { index: number; risk: number }[];
+};
+
 export type StrategyTrade = {
   signalIndex: number;
   entryIndex: number;
@@ -36,12 +62,18 @@ export type StrategyTrade = {
   entryCommission: number;
   exitCommission: number | null;
   realized: number | null;
-  /** Yalnız risk motoru doldurur. Eski motor bu alanları yazmaz. */
+  /** Kapanmadan gerçekleşen parçalı kâr. Döngü kapanınca realized içine alınır. */
+  booked?: number;
+  /** Yalnız risk ve kademe motoru doldurur. Eski motor bu alanları yazmaz. */
   exitReason?: ExitReason;
   initialStop?: number | null;
   initialTarget?: number | null;
+  activeTarget?: number | null;
   slippageCost?: number;
   stopPath?: StopPoint[];
+  maxShares?: number;
+  maxRisk?: number;
+  legs?: ScaleLegs;
 };
 
 export type BuyHold = {
@@ -83,6 +115,8 @@ export type StrategyReport = {
   avgLoss: number | null;
   maxConsecutiveLosses: number;
   totalSlippage: number;
+  maxPosition: number;
+  maxOpenRisk: number;
   buyHold: BuyHold | null;
   openShares: number;
 };
@@ -129,6 +163,8 @@ function empty(spec: EmaCrossSpec, adjustment: string, error: string, bars = 0, 
     avgLoss: null,
     maxConsecutiveLosses: 0,
     totalSlippage: 0,
+    maxPosition: 0,
+    maxOpenRisk: 0,
     buyHold: null,
     openShares: 0,
   };
@@ -154,10 +190,11 @@ function wholeShares(cash: number, fill: number, feeRate: number) {
   return shares;
 }
 
-export function summarizeStrategy(spec: EmaCrossSpec, trades: StrategyTrade[], equity: number[]): Pick<StrategyReport, "portfolio" | "realized" | "unrealized" | "totalReturn" | "maxDrawdown" | "maxDrawdownPercent" | "completed" | "wins" | "losses" | "winRate" | "profitFactor" | "totalCommission" | "avgRewardRisk" | "stopExits" | "targetExits" | "avgWin" | "avgLoss" | "maxConsecutiveLosses" | "totalSlippage" | "openShares"> {
+export function summarizeStrategy(spec: EmaCrossSpec, trades: StrategyTrade[], equity: number[]): Pick<StrategyReport, "portfolio" | "realized" | "unrealized" | "totalReturn" | "maxDrawdown" | "maxDrawdownPercent" | "completed" | "wins" | "losses" | "winRate" | "profitFactor" | "totalCommission" | "avgRewardRisk" | "stopExits" | "targetExits" | "avgWin" | "avgLoss" | "maxConsecutiveLosses" | "totalSlippage" | "maxPosition" | "maxOpenRisk" | "openShares"> {
   const closed = trades.filter((trade) => trade.realized != null);
   const open = trades.find((trade) => trade.exitIndex == null);
-  const realized = closed.reduce((sum, trade) => sum + (trade.realized ?? 0), 0);
+  const booked = trades.reduce((sum, trade) => sum + (trade.exitIndex == null ? (trade.booked ?? 0) : 0), 0);
+  const realized = closed.reduce((sum, trade) => sum + (trade.realized ?? 0), 0) + booked;
   const portfolio = equity.at(-1) ?? spec.capital;
   const unrealized = open ? portfolio - spec.capital - realized : 0;
   let peak = equity[0] ?? spec.capital;
@@ -171,8 +208,8 @@ export function summarizeStrategy(spec: EmaCrossSpec, trades: StrategyTrade[], e
   }
   const wins = closed.filter((trade) => (trade.realized ?? 0) > 0).length;
   const losses = closed.filter((trade) => (trade.realized ?? 0) < 0).length;
-  const profit = closed.reduce((sum, trade) => sum + Math.max(0, trade.realized ?? 0), 0);
-  const loss = closed.reduce((sum, trade) => sum + Math.max(0, -(trade.realized ?? 0)), 0);
+  const profit = closed.reduce((sum, trade) => sum + Math.max(0, trade.realized ?? 0), 0) + Math.max(0, booked);
+  const loss = closed.reduce((sum, trade) => sum + Math.max(0, -(trade.realized ?? 0)), 0) + Math.max(0, -booked);
   const totalCommission = trades.reduce((sum, trade) => sum + trade.entryCommission + (trade.exitCommission ?? 0), 0);
   const rewarded = closed.filter((trade) => trade.initialStop != null && trade.entryPrice > (trade.initialStop ?? 0));
   const rewardRatios = rewarded.map((trade) => (trade.realized ?? 0) / ((trade.entryPrice - (trade.initialStop ?? 0)) * trade.shares));
@@ -204,6 +241,8 @@ export function summarizeStrategy(spec: EmaCrossSpec, trades: StrategyTrade[], e
     avgLoss: losses ? -(loss / losses) : null,
     maxConsecutiveLosses,
     totalSlippage: trades.reduce((sum, trade) => sum + (trade.slippageCost ?? 0), 0),
+    maxPosition: trades.reduce((max, trade) => Math.max(max, trade.maxShares ?? 0), 0),
+    maxOpenRisk: trades.reduce((max, trade) => Math.max(max, trade.maxRisk ?? 0), 0),
     openShares: open?.shares ?? 0,
   };
 }
@@ -355,6 +394,10 @@ export function projectStrategy(report: StrategyReport, bars: OhlcBar[], cursor:
   const end = Math.max(0, Math.min(cursor, bars.length - 1, report.equity.length - 1));
   const equity = report.equity.slice(0, end + 1);
   const trades = report.trades.flatMap((trade) => {
+    if (trade.legs) {
+      const clipped = clipScaleTrade(trade, end);
+      return clipped ? [clipped] : [];
+    }
     if (trade.entryIndex > end) return [];
     const stopPath = trade.stopPath?.filter((point) => point.index <= end);
     if (trade.exitIndex == null || trade.exitIndex > end) {
@@ -364,7 +407,8 @@ export function projectStrategy(report: StrategyReport, bars: OhlcBar[], cursor:
   });
   const nextEntry = report.trades.find((trade) => trade.signalIndex === end && trade.entryIndex > end);
   const nextExit = report.trades.find((trade) => trade.exitSignalIndex === end && trade.exitIndex != null && trade.exitIndex > end);
-  const pending = nextEntry
+  const nextAdd = report.trades.find((trade) => trade.legs?.entries.some((leg) => leg.reason === "add" && leg.signalIndex === end && leg.index > end));
+  const pending = nextEntry || nextAdd
     ? { side: "buy" as const, signalIndex: end }
     : nextExit
       ? { side: "sell" as const, signalIndex: end }
@@ -399,19 +443,51 @@ function activeStop(trade: StrategyTrade): number | null {
   return trade.initialStop ?? null;
 }
 
+function singleMark(trade: StrategyTrade): TradeMark {
+  const open = trade.exitIndex == null;
+  return {
+    entryIndex: trade.entryIndex,
+    entryPrice: trade.entryPrice,
+    entryBuy: true,
+    exitIndex: trade.exitIndex,
+    exitPrice: trade.exitPrice,
+    exitBuy: false,
+    stop: open ? activeStop(trade) : null,
+    target: open ? (trade.activeTarget ?? trade.initialTarget ?? null) : null,
+    average: open && trade.legs ? trade.entryPrice : null,
+    showPrice: true,
+  };
+}
+
 export function strategyMarks(trades: StrategyTrade[]): TradeMark[] {
-  return trades.map((trade) => {
+  return trades.flatMap((trade) => {
+    if (!trade.legs?.entries.length) return [singleMark(trade)];
     const open = trade.exitIndex == null;
-    return {
-      entryIndex: trade.entryIndex,
-      entryPrice: trade.entryPrice,
+    const marks: TradeMark[] = trade.legs.entries.map((leg, index, all) => ({
+      entryIndex: leg.index,
+      entryPrice: leg.price,
       entryBuy: true,
-      exitIndex: trade.exitIndex,
-      exitPrice: trade.exitPrice,
+      exitIndex: null,
+      exitPrice: null,
       exitBuy: false,
-      stop: open ? activeStop(trade) : null,
-      target: open ? trade.initialTarget ?? null : null,
+      stop: open && index === all.length - 1 ? activeStop(trade) : null,
+      target: open && index === all.length - 1 ? (trade.activeTarget ?? null) : null,
+      average: open && index === all.length - 1 ? trade.entryPrice : null,
       showPrice: true,
-    };
+    }));
+    for (const leg of trade.legs.exits) {
+      marks.push({
+        entryIndex: leg.index,
+        entryPrice: leg.price,
+        entryBuy: false,
+        exitIndex: null,
+        exitPrice: null,
+        exitBuy: false,
+        stop: null,
+        target: null,
+        showPrice: true,
+      });
+    }
+    return marks;
   });
 }

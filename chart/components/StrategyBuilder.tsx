@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { backtestRules, describeGroups, type CompareOp, type Condition, type ConditionGroup, type Join, type LineSpec, type Operand, type StrategyRules } from "../lib/strategyRules";
 import { CATEGORIES, filterCatalog, type Category } from "../lib/indicatorCatalog";
 import { defaultRiskDraft, settingsFromDraft, type RiskDraft } from "../lib/riskPlan";
+import { defaultScaleDraft, settingsFromScaleDraft, type ScaleDraft } from "../lib/scalePlan";
 import { loadStrategies, saveStrategies, type SavedStrategy } from "../lib/strategyStore";
 import type { StrategyReport } from "../lib/emaCross";
 import type { OhlcBar } from "../lib/parseOhlcv";
@@ -217,7 +218,115 @@ function CatalogPicker({ onPick, onClose }: { onPick: (condition: Condition) => 
   );
 }
 
-function RiskSection({ risk, onChange }: { risk: RiskDraft; onChange: (risk: RiskDraft) => void }) {
+function entryMode(scale: ScaleDraft) {
+  if (scale.entryPercents.length <= 1) return "off";
+  const key = scale.entryPercents.join(",");
+  if (key === "50,50") return "2";
+  if (key === "25,50,25") return "3";
+  return "custom";
+}
+
+function exitMode(scale: ScaleDraft) {
+  if (!scale.exitPercents.length) return "off";
+  if (scale.exitPercents.join(",") === "3,6" && scale.exitSellPercents.join(",") === "50,50") return "2";
+  if (scale.exitPercents.join(",") === "3,6,10" && scale.exitSellPercents.join(",") === "25,35,40") return "3";
+  return "custom";
+}
+
+function ScaleSection({ scale, onChange }: { scale: ScaleDraft; onChange: (scale: ScaleDraft) => void }) {
+  const set = (patch: Partial<ScaleDraft>) => {
+    const next = { ...scale, ...patch };
+    next.enabled = next.entryPercents.length > 1 || next.exitPercents.length > 0;
+    onChange(next);
+  };
+  const entries = entryMode(scale);
+  const exits = exitMode(scale);
+  return (
+    <div data-testid="scale-panel" style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #2c2c2c", paddingTop: 8 }}>
+      <strong>Kademeli işlemler</strong>
+      <p style={{ margin: 0, color: "#9a9a9a" }}>Varsayılan kapalıdır. Artırma sinyali kapanmış mumda oluşur, emir sonraki açılışta dolar. Satış oranları ilk satış öncesi referans adede göredir. Son hedef kalanı kapatır.</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
+        <label>Giriş
+          <select data-testid="scale-entry" aria-label="Kademeli giriş" value={entries} onChange={(event) => {
+            const value = event.target.value;
+            if (value === "off") set({ entryPercents: [100] });
+            else if (value === "2") set({ entryPercents: [50, 50] });
+            else if (value === "3") set({ entryPercents: [25, 50, 25] });
+            else set({ entryPercents: scale.entryPercents.length > 1 ? scale.entryPercents : [25, 50, 25] });
+          }} style={field}>
+            <option value="off">Tek seferde giriş</option>
+            <option value="2">2 aşamalı giriş</option>
+            <option value="3">3 aşamalı giriş</option>
+            <option value="custom">Kullanıcı tanımlı</option>
+          </select>
+        </label>
+        {entries !== "off" && scale.entryPercents.map((percent, index) => (
+          <span key={`entry-${index}`}>{numberField(`Giriş ${index + 1} %`, percent, (value) => set({ entryPercents: scale.entryPercents.map((item, itemIndex) => itemIndex === index ? value : item) }))}</span>
+        ))}
+        {entries === "custom" && <button type="button" onClick={() => set({ entryPercents: [...scale.entryPercents, 10] })} style={{ ...field, cursor: "pointer" }}>Aşama ekle</button>}
+      </div>
+      {entries !== "off" && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
+          <label>Pozisyon artırma
+            <select data-testid="scale-trigger" aria-label="Pozisyon artırma" value={scale.trigger} onChange={(event) => set({ trigger: event.target.value as ScaleDraft["trigger"] })} style={field}>
+              <option value="percent">Fiyat yüzdesi</option>
+              <option value="ema">EMA kesişimi</option>
+              <option value="break-high">Önceki zirve</option>
+              <option value="atr">ATR hareketi</option>
+            </select>
+          </label>
+          {scale.trigger === "percent" && numberField("Artış %", scale.triggerPercent, (triggerPercent) => set({ triggerPercent }))}
+          {scale.trigger === "ema" && (
+            <>
+              {numberField("Hızlı EMA", scale.emaFast, (emaFast) => set({ emaFast }))}
+              {numberField("Yavaş EMA", scale.emaSlow, (emaSlow) => set({ emaSlow }))}
+            </>
+          )}
+          {scale.trigger === "atr" && (
+            <>
+              {numberField("ATR periyodu", scale.atrPeriod, (atrPeriod) => set({ atrPeriod }))}
+              {numberField("ATR çarpanı", scale.atrMult, (atrMult) => set({ atrMult }))}
+            </>
+          )}
+        </div>
+      )}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "end" }}>
+        <label>Kâr alma
+          <select data-testid="scale-exit" aria-label="Kademeli kâr" value={exits} onChange={(event) => {
+            const value = event.target.value;
+            if (value === "off") set({ exitPercents: [], exitSellPercents: [] });
+            else if (value === "2") set({ exitPercents: [3, 6], exitSellPercents: [50, 50] });
+            else if (value === "3") set({ exitPercents: [3, 6, 10], exitSellPercents: [25, 35, 40] });
+            else set({
+              exitPercents: scale.exitPercents.length ? scale.exitPercents : [3, 6, 10],
+              exitSellPercents: scale.exitSellPercents.length ? scale.exitSellPercents : [25, 35, 40],
+            });
+          }} style={field}>
+            <option value="off">Tek hedef</option>
+            <option value="2">2 aşamalı kâr alma</option>
+            <option value="3">3 aşamalı kâr alma</option>
+            <option value="custom">Kullanıcı tanımlı</option>
+          </select>
+        </label>
+        {scale.exitPercents.map((percent, index) => (
+          <span key={`exit-${index}`}>
+            {numberField(`Hedef ${index + 1} %`, percent, (value) => set({ exitPercents: scale.exitPercents.map((item, itemIndex) => itemIndex === index ? value : item) }))}
+            {numberField(`Satış ${index + 1} %`, scale.exitSellPercents[index] ?? 0, (value) => set({ exitSellPercents: scale.exitPercents.map((_, itemIndex) => itemIndex === index ? value : (scale.exitSellPercents[itemIndex] ?? 0)) }))}
+          </span>
+        ))}
+      </div>
+      <label>Toplam risk sınırı %
+        <input data-testid="scale-risk" aria-label="Toplam risk sınırı" value={scale.maxRiskPercent ?? ""} onChange={(event) => {
+          const text = event.target.value.trim();
+          set({ maxRiskPercent: text === "" ? null : Number(text) });
+        }} style={{ ...field, width: 88 }} />
+      </label>
+      <p style={{ margin: 0, color: "#9a9a9a" }}>Boş risk sınırı, ek tavan koymaz. Risk yüzdesiyle adet seçiliyse o bütçe tavan olarak kalır.</p>
+    </div>
+  );
+}
+
+function RiskSection({ risk, onChange, scale, onScale }: { risk: RiskDraft; onChange: (risk: RiskDraft) => void; scale: ScaleDraft; onScale: (scale: ScaleDraft) => void }) {
   const set = (patch: Partial<RiskDraft>) => {
     const next = { ...risk, ...patch };
     if (next.stop === "none" && next.target === "rr") next.target = "none";
@@ -307,7 +416,7 @@ function RiskSection({ risk, onChange }: { risk: RiskDraft; onChange: (risk: Ris
           {risk.size === "risk" && numberField("İşlem riski %", risk.riskPercent, (riskPercent) => set({ riskPercent }))}
           {stopOff && <span style={{ color: "#9a9a9a" }}>Risk yüzdesi için başlangıç stopu gerekli.</span>}
         </div>
-        <p data-testid="risk-scale-note" style={{ margin: 0, color: "#9a9a9a" }}>Kademeli giriş ve kademeli kâr alma bu sürümde yok.</p>
+        <ScaleSection scale={scale} onChange={onScale} />
       </div>
     </details>
   );
@@ -360,6 +469,7 @@ export function StrategyBuilder({
       buyGroups: current.buyGroups,
       sellGroups: current.sellGroups,
       risk: settingsFromDraft(current.risk ?? defaultRiskDraft()),
+      scale: settingsFromScaleDraft(current.scale ?? defaultScaleDraft()),
     };
   }
 
@@ -468,7 +578,7 @@ export function StrategyBuilder({
       </div>
       {renderSide("buy", "AL koşulları", "#16c47a")}
       {renderSide("sell", "SAT koşulları", "#e10600")}
-      <RiskSection risk={draft.risk ?? defaultRiskDraft()} onChange={(risk) => setDraft({ ...draft, risk })} />
+      <RiskSection risk={draft.risk ?? defaultRiskDraft()} onChange={(risk) => setDraft({ ...draft, risk })} scale={draft.scale ?? defaultScaleDraft()} onScale={(scale) => setDraft({ ...draft, scale })} />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button type="button" data-testid="strategy-run-rules" onClick={run} disabled={!rows?.length} style={{ minHeight: 32, padding: "0 12px", borderRadius: 8, border: "1px solid #f2f2f2", background: "#f2f2f2", color: "#111", cursor: "pointer" }}>Testi Başlat</button>
         <button type="button" data-testid="strategy-save" onClick={save} style={{ ...field, cursor: "pointer" }}>Kaydet</button>

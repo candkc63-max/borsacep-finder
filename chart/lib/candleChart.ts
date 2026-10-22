@@ -61,6 +61,13 @@ function levelLines(marks: TradeMark[]) {
           lineStyle: { color: "#16c47a", type: "solid" as const, width: 1 },
           label: { show: true, formatter: "Hedef", color: "#16c47a", position: "insideEndBottom" as const },
         }]),
+    ...(trade.average == null
+      ? []
+      : [{
+          yAxis: trade.average,
+          lineStyle: { color: "#f5c542", type: "dashed" as const, width: 1 },
+          label: { show: true, formatter: "Maliyet", color: "#f5c542", position: "insideEndTop" as const },
+        }]),
   ]);
 }
 

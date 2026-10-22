@@ -1,5 +1,6 @@
 import type { CompareOp, Condition, ConditionGroup, Join, LineSpec, Operand } from "./strategyRules";
 import { defaultRiskDraft, type RiskDraft, type SizeKind, type StopKind, type TargetKind, type TrailKind } from "./riskPlan";
+import { defaultScaleDraft, type AddTrigger, type ScaleDraft } from "./scalePlan";
 
 export const STRATEGY_STORAGE_KEY = "borsa101-strategies";
 
@@ -20,6 +21,7 @@ export type SavedStrategy = {
   fee: number;
   slippage: number;
   risk?: RiskDraft;
+  scale?: ScaleDraft;
 };
 
 type Memory = {
@@ -118,6 +120,7 @@ function saved(value: unknown): SavedStrategy | null {
   const sellGroups = parseGroups(row.sellGroups);
   if (buyGroups === null || sellGroups === null) return null;
   const risk = parseRisk(row.risk);
+  const scale = parseScale(row.scale);
   return {
     id: row.id,
     name: row.name,
@@ -135,6 +138,37 @@ function saved(value: unknown): SavedStrategy | null {
     fee: row.fee,
     slippage: row.slippage,
     ...(risk ? { risk } : {}),
+    ...(scale ? { scale } : {}),
+  };
+}
+
+function parseScale(value: unknown): ScaleDraft | undefined {
+  if (value == null) return undefined;
+  if (!value || typeof value !== "object") return undefined;
+  const row = value as Record<string, unknown>;
+  const trigger = row.trigger;
+  const triggers = new Set(["percent", "ema", "break-high", "atr"]);
+  if (typeof row.enabled !== "boolean" || typeof trigger !== "string" || !triggers.has(trigger)) return undefined;
+  const numbers = ["triggerPercent", "emaFast", "emaSlow", "atrPeriod", "atrMult"] as const;
+  if (numbers.some((key) => typeof row[key] !== "number" || !Number.isFinite(row[key] as number))) return undefined;
+  if (!Array.isArray(row.entryPercents) || !Array.isArray(row.exitPercents) || !Array.isArray(row.exitSellPercents)) return undefined;
+  const lists = [row.entryPercents, row.exitPercents, row.exitSellPercents];
+  if (lists.some((list) => list.some((item) => typeof item !== "number" || !Number.isFinite(item)))) return undefined;
+  if (row.maxRiskPercent != null && (typeof row.maxRiskPercent !== "number" || !Number.isFinite(row.maxRiskPercent))) return undefined;
+  const base = defaultScaleDraft();
+  return {
+    ...base,
+    enabled: row.enabled,
+    trigger: trigger as AddTrigger,
+    triggerPercent: row.triggerPercent as number,
+    emaFast: row.emaFast as number,
+    emaSlow: row.emaSlow as number,
+    atrPeriod: row.atrPeriod as number,
+    atrMult: row.atrMult as number,
+    entryPercents: row.entryPercents as number[],
+    exitPercents: row.exitPercents as number[],
+    exitSellPercents: row.exitSellPercents as number[],
+    maxRiskPercent: row.maxRiskPercent == null ? null : row.maxRiskPercent as number,
   };
 }
 
