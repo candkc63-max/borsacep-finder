@@ -150,16 +150,30 @@ function resolve(row: ScreenerRow, id: string): number | null {
   return typeof tech === "number" && Number.isFinite(tech) ? tech : null;
 }
 
+type ScanQuery = {
+  rules: Rule[];
+  universe: Universe;
+  interval: ScreenInterval;
+};
+
+const IDLE_TEXT = "Hisseleri keşfetmek için filtre oluşturun veya hazır bir tarama seçin.";
+
+function scanSignature(query: ScanQuery) {
+  return JSON.stringify(query);
+}
+
 export function Screener({
   stocks,
   sourceLabel,
   onOpen,
+  onScan,
   loadBars = true,
   pageSize = 25,
 }: {
   stocks: Stock[];
   sourceLabel: string;
   onOpen: (ticker: string, blank: boolean) => void;
+  onScan?: () => Promise<void> | void;
   loadBars?: boolean;
   pageSize?: number;
 }) {
@@ -175,22 +189,28 @@ export function Screener({
   const [more, setMore] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [committed, setCommitted] = useState<ScanQuery | null>(null);
   const ruleSeq = useRef(1);
 
   const tickerKey = stocks.map((stock) => stock.ticker).join(",");
-  useEffect(() => {
-    if (!loadBars) return;
-    let cancel = false;
+  const techKey = useRef("");
+  const draftQuery = { rules: draft.rules, universe: draft.universe, interval: draft.interval };
+  const showResults = phase === "ready" && committed != null && scanSignature(committed) === scanSignature(draftQuery);
+  const barsNeeded = showResults && ((committed?.rules.some(ruleNeedsBars) ?? false) || draft.tab === "technical" || draft.tab === "performance");
+
+  async function loadTechnicals(interval: ScreenInterval, isCancelled: () => boolean) {
+    const key = `${interval}:${tickerKey}`;
+    if (techKey.current === key) return;
     const tickers = tickerKey ? tickerKey.split(",") : [];
-    const interval = draft.interval;
     const cached = readTechCache(interval);
-    setTech(cached);
+    setTech((prev) => ({ ...cached, ...prev }));
     const queue = [...tickers];
     let done = 0;
     const fetched: Record<string, TechnicalSnapshot | null> = {};
     setTechNote(tickers.length ? "Teknikler yükleniyor" : "");
     const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
-      while (!cancel) {
+      while (!isCancelled()) {
         const ticker = queue.shift();
         if (!ticker) return;
         let snapshot: TechnicalSnapshot | null = null;
@@ -204,25 +224,32 @@ export function Screener({
         }
         fetched[ticker] = snapshot;
         done += 1;
-        if (!cancel && (snapshot || !cached[ticker])) {
+        if (!isCancelled() && (snapshot || !cached[ticker])) {
           setTech((prev) => ({ ...prev, [ticker]: snapshot ?? prev[ticker] ?? null }));
           setTechNote(`Teknikler ${done}/${tickers.length}`);
         }
       }
     });
-    void Promise.all(workers).then(() => {
-      if (cancel) return;
-      const merged = { ...cached };
-      for (const [ticker, snapshot] of Object.entries(fetched)) {
-        if (snapshot) merged[ticker] = snapshot;
-      }
-      writeTechCache(interval, merged);
-      setTechNote(Object.values(merged).some(Boolean) ? "Göstergeler kapanmış mumdan hesaplandı" : "Mum serisi alınamadı. Teknik filtreler eşleşmez.");
-    });
+    await Promise.all(workers);
+    if (isCancelled()) return;
+    const merged = { ...cached };
+    for (const [ticker, snapshot] of Object.entries(fetched)) {
+      if (snapshot) merged[ticker] = snapshot;
+    }
+    writeTechCache(interval, merged);
+    setTech((prev) => ({ ...prev, ...merged }));
+    techKey.current = key;
+    setTechNote(Object.values(merged).some(Boolean) ? "Göstergeler kapanmış mumdan hesaplandı" : "Mum serisi alınamadı. Teknik filtreler eşleşmez.");
+  }
+
+  useEffect(() => {
+    if (!loadBars || !barsNeeded) return;
+    let cancel = false;
+    void loadTechnicals(draft.interval, () => cancel);
     return () => {
       cancel = true;
     };
-  }, [loadBars, draft.interval, tickerKey]);
+  }, [loadBars, barsNeeded, draft.interval, tickerKey]);
 
   useEffect(() => {
     setPage(1);
@@ -231,14 +258,29 @@ export function Screener({
   const rows = useMemo(() => stocks.map((stock) => toScreenerRow(stock, tech[stock.ticker] ?? null)), [stocks, tech]);
   const summary = coverageSummary(rows);
   const membershipBlocked = (draft.universe === "bist100" || draft.universe === "bist50") && rows.every((row) => row.indexes.length === 0);
-  const filtered = useMemo(() => applyScreen(rows, {
-    rules: draft.rules,
-    search: draft.search,
-    universe: draft.universe,
-    watchlist: watch,
-    sortKey: draft.sortKey,
-    sortDesc: draft.sortDesc,
-  }), [rows, draft, watch]);
+  const filtered = useMemo(() => {
+    if (!showResults || !committed) return [];
+    return applyScreen(rows, {
+      rules: committed.rules,
+      search: draft.search,
+      universe: committed.universe,
+      watchlist: watch,
+      sortKey: draft.sortKey,
+      sortDesc: draft.sortDesc,
+    });
+  }, [rows, showResults, committed, draft.search, draft.sortKey, draft.sortDesc, watch]);
+  const searchHits = useMemo(() => {
+    const words = draft.search.trim();
+    if (!words || showResults || phase === "loading") return [];
+    return applyScreen(rows, {
+      rules: [],
+      search: words,
+      universe: "all",
+      watchlist: [],
+      sortKey: "ticker",
+      sortDesc: false,
+    });
+  }, [rows, draft.search, showResults, phase]);
   const paged = pageOf(filtered, page, pageSize);
   const columns = visibleColumns(draft.tab, draft.columns);
   const showName = columns.some((column) => column.id === "name");
@@ -250,8 +292,43 @@ export function Screener({
     setDraft((prev) => ({ ...prev, ...partial }));
   }
 
+  function revise(partial: Partial<Draft>) {
+    setPhase((current) => (current === "loading" ? current : "idle"));
+    setCommitted(null);
+    patch(partial);
+  }
+
+  function startScan() {
+    const snapshot: ScanQuery = { rules: draft.rules, universe: draft.universe, interval: draft.interval };
+    const wantsBars = loadBars && (snapshot.rules.some(ruleNeedsBars) || draft.tab === "technical" || draft.tab === "performance");
+    setPhase("loading");
+    let cancel = false;
+    void Promise.resolve()
+      .then(() => onScan?.())
+      .then(() => (wantsBars ? loadTechnicals(snapshot.interval, () => cancel) : undefined))
+      .then(() => {
+        if (cancel) return;
+        setCommitted(snapshot);
+        setPhase("ready");
+      })
+      .catch(() => {
+        if (cancel) return;
+        setCommitted(null);
+        setPhase("error");
+      });
+  }
+
+  function resetWorkspace() {
+    setSavedId(null);
+    setCommitted(null);
+    setPhase("idle");
+    setTechNote("");
+    setColumnsOpen(false);
+    patch({ name: "", rules: [], columns: null, search: "", tab: "overview", universe: "all", sortKey: "marketCap", sortDesc: true });
+  }
+
   function updateRule(id: string, partial: Partial<Rule>) {
-    patch({
+    revise({
       rules: draft.rules.map((rule) => {
         if (rule.id !== id) return rule;
         const next = { ...rule, ...partial };
@@ -265,20 +342,20 @@ export function Screener({
   function addRule() {
     const field = addFields[0] ?? FIELDS[0];
     ruleSeq.current += 1;
-    patch({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: field.id, op: field.ops[0], value: "", valueTo: "" }] });
+    revise({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: field.id, op: field.ops[0], value: "", valueTo: "" }] });
   }
 
   function addField(fieldId: string) {
     const field = fieldById(fieldId);
     if (!field) return;
     ruleSeq.current += 1;
-    patch({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: field.id, op: field.ops[0], value: "", valueTo: "" }] });
+    revise({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: field.id, op: field.ops[0], value: "", valueTo: "" }] });
   }
 
   function setQuick(fieldId: string, value: string) {
     const existing = draft.rules.find((rule) => rule.field === fieldId);
     if (!value.trim()) {
-      if (existing) patch({ rules: draft.rules.filter((rule) => rule.id !== existing.id) });
+      if (existing) revise({ rules: draft.rules.filter((rule) => rule.id !== existing.id) });
       return;
     }
     if (existing) {
@@ -288,14 +365,14 @@ export function Screener({
     const field = fieldById(fieldId);
     if (!field) return;
     ruleSeq.current += 1;
-    patch({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: fieldId, op: "gt", value, valueTo: "" }] });
+    revise({ rules: [...draft.rules, { id: `n-${ruleSeq.current}`, field: fieldId, op: "gt", value, valueTo: "" }] });
   }
 
   function applyPreset(id: string) {
     const preset = PRESETS.find((item) => item.id === id);
     if (!preset) return;
     setSavedId(null);
-    patch({
+    revise({
       name: preset.name,
       rules: preset.rules.map((rule, index) => ({ ...rule, id: `${preset.id}-${index}` })),
       tab: preset.tab,
@@ -358,7 +435,7 @@ export function Screener({
     const found = screens.find((item) => item.id === id);
     if (!found) return;
     setSavedId(found.id);
-    patch({
+    revise({
       name: found.name,
       rules: found.rules,
       columns: found.columns,
@@ -418,7 +495,7 @@ export function Screener({
             {screens.map((screen) => <option key={screen.id} value={screen.id}>{screen.name}</option>)}
           </select>
           <input data-testid="screen-name" className="ctrl name-input" aria-label="Filtre adı" value={draft.name} placeholder="Filtre adı" onChange={(event) => patch({ name: event.target.value })} />
-          <button type="button" className="btn" data-testid="screen-new" onClick={() => { setSavedId(null); patch({ name: "", rules: [], columns: null, tab: "overview", sortKey: "marketCap", sortDesc: true }); }}>Yeni filtre</button>
+          <button type="button" className="btn" data-testid="screen-new" onClick={() => { setSavedId(null); revise({ name: "", rules: [], columns: null, tab: "overview", sortKey: "marketCap", sortDesc: true }); }}>Yeni filtre</button>
           <button type="button" className="btn" data-testid="screen-save" onClick={save} disabled={!draft.name.trim()}>Kaydet</button>
           <button type="button" className="btn" data-testid="screen-copy" onClick={copyScreen}>Kopyala</button>
           <button type="button" className="btn" data-testid="screen-delete" onClick={removeScreen} disabled={!savedId}>Sil</button>
@@ -433,43 +510,58 @@ export function Screener({
           )}
         </div>
         </div>
-        <p data-testid="screen-coverage" className="meta">
-          {summary.scanned} tarandı · {summary.missing} eksik · {summary.sample} örnek · {paged.total} listelenen · evren {summary.universe} · {sourceLabel}
-        </p>
+        {showResults && (
+          <p data-testid="screen-coverage" className="meta">
+            {summary.scanned} tarandı · {summary.missing} eksik · {summary.sample} örnek · {paged.total} listelenen · evren {summary.universe} · {sourceLabel}
+          </p>
+        )}
       </header>
 
       <section className="filters">
-        <div className="row">
-          <ScreenField label="Piyasa">
-            <select className="ctrl" aria-label="Piyasa" value="TR" onChange={() => undefined}>
-              <option value="TR">TR</option>
-            </select>
-          </ScreenField>
+        <div className="row start-row">
+          <label className="quick search-field">
+            <span>Hisse arama</span>
+            <input data-testid="screen-search" className="ctrl search" aria-label="Hisse ara" value={draft.search} placeholder="Sembol veya şirket" onChange={(event) => patch({ search: event.target.value })} />
+          </label>
           <ScreenField label="Evren">
-            <select data-testid="screen-universe" className="ctrl" aria-label="Evren" value={draft.universe} onChange={(event) => patch({ universe: event.target.value as Universe })}>
+            <select data-testid="screen-universe" className="ctrl" aria-label="Evren" value={draft.universe} onChange={(event) => revise({ universe: event.target.value as Universe })}>
               <option value="all">Örnek liste</option>
               <option value="bist100">BIST 100</option>
               <option value="bist50">BIST 50</option>
               <option value="watch">İzleme Listesi</option>
             </select>
           </ScreenField>
+          <ScreenField label="Hazır taramalar">
+            <select data-testid="screen-preset" className="ctrl" aria-label="Hazır filtre" value="" onChange={(event) => applyPreset(event.target.value)}>
+              <option value="">Seç</option>
+              {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+            </select>
+          </ScreenField>
+          <div className="row-actions">
+            <button type="button" className="btn" data-testid="screen-add-filter" onClick={addRule}>Filtre ekle</button>
+            <button type="button" className="btn btn-run" data-testid="screen-run" onClick={startScan} disabled={phase === "loading"}>{phase === "loading" ? "Taranıyor" : "Taramayı Başlat"}</button>
+            <button type="button" className="btn" data-testid="screen-clear" onClick={resetWorkspace}>Taramayı temizle</button>
+          </div>
+        </div>
+        {(draft.rules.length > 0 || showResults) && (
+        <div className="row">
+          <ScreenField label="Piyasa">
+            <select className="ctrl" aria-label="Piyasa" value="TR" onChange={() => undefined}>
+              <option value="TR">TR</option>
+            </select>
+          </ScreenField>
           <ScreenField label="Zaman dilimi">
-            <select data-testid="screen-interval" className="ctrl" aria-label="Zaman dilimi" value={draft.interval} onChange={(event) => patch({ interval: event.target.value as ScreenInterval })}>
+            <select data-testid="screen-interval" className="ctrl" aria-label="Zaman dilimi" value={draft.interval} onChange={(event) => revise({ interval: event.target.value as ScreenInterval })}>
               <option value="1d">Günlük</option>
               <option value="1wk">Haftalık</option>
               <option value="4h">4s</option>
               <option value="1h">1s</option>
             </select>
           </ScreenField>
-          <ScreenField label="Hazır filtre">
-            <select data-testid="screen-preset" className="ctrl" aria-label="Hazır filtre" value="" onChange={(event) => applyPreset(event.target.value)}>
-              <option value="">Seç</option>
-              {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-            </select>
-          </ScreenField>
         </div>
+        )}
 
-        <div className="row">
+        {(draft.rules.length > 0 || showResults) && <div className="row">
           {QUICK_NUMBERS.map((item) => (
             <QuickField key={item.id} label={item.label}>
               <input
@@ -489,11 +581,9 @@ export function Screener({
             </select>
           </QuickField>
           <div className="row-actions">
-            <button type="button" className="btn" data-testid="screen-add-filter" onClick={addRule}>Filtre ekle</button>
-            <button type="button" className="btn" data-testid="screen-clear" onClick={() => { setSavedId(null); patch({ rules: [], name: "", columns: null }); }}>Filtreleri temizle</button>
             <button type="button" className={`btn${more ? " is-on" : ""}`} data-testid="screen-more" onClick={() => setMore((value) => !value)}>{more ? "Az filtre" : "Daha fazla filtre"}</button>
           </div>
-        </div>
+        </div>}
 
         {draft.rules.length > 0 && (
           <div className="chips">
@@ -520,7 +610,7 @@ export function Screener({
                       {rule.op === "between" && <input className="ctrl value" aria-label={`${field.label} üst değer`} value={rule.valueTo} onChange={(event) => updateRule(rule.id, { valueTo: event.target.value })} />}
                     </>
                   ) : null}
-                  <button type="button" className="btn chip-remove" data-testid={`filter-remove-${rule.id}`} aria-label="Filtreyi sil" onClick={() => patch({ rules: draft.rules.filter((item) => item.id !== rule.id) })}>×</button>
+                  <button type="button" className="btn chip-remove" data-testid={`filter-remove-${rule.id}`} aria-label="Filtreyi sil" onClick={() => revise({ rules: draft.rules.filter((item) => item.id !== rule.id) })}>×</button>
                 </div>
               );
             })}
@@ -529,14 +619,34 @@ export function Screener({
         {membershipBlocked && <p data-testid="screen-membership" className="note-banner">BIST 100 ve BIST 50 üyeliği doğrulanmış bir kaynaktan gelmediği için liste boş. Tahmini etiket kullanılmıyor.</p>}
       </section>
 
-      <div role="tablist" className="tabs">
+      {phase === "loading" && <p data-testid="screen-loading" className="status loading">Tarama çalışıyor</p>}
+      {phase === "error" && <p data-testid="screen-error" className="status error">Canlı veri alınamadı. Sonuç listelenmedi.</p>}
+      {!showResults && phase !== "loading" && phase !== "error" && searchHits.length === 0 && draft.search.trim() === "" && (
+        <p data-testid="screen-idle" className="status idle">{IDLE_TEXT}</p>
+      )}
+      {!showResults && phase !== "loading" && draft.search.trim() !== "" && searchHits.length === 0 && (
+        <p data-testid="screen-search-empty" className="status idle">Aramaya uyan hisse yok.</p>
+      )}
+      {!showResults && phase !== "loading" && searchHits.length > 0 && (
+        <ul data-testid="screen-search-results" className="search-list">
+          {searchHits.map((row) => (
+            <li key={row.ticker}>
+              <button type="button" data-testid={`screen-search-row-${row.ticker}`} onClick={() => onOpen(row.ticker, false)}>
+                <span className="sym-ticker">{row.ticker}</span>
+                <span className="sym-name">{row.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showResults && <div role="tablist" className="tabs">
         {TABS.map((tab) => (
           <button key={tab.id} type="button" role="tab" className="tab" aria-selected={draft.tab === tab.id} data-testid={`screen-tab-${tab.id}`} onClick={() => patch({ tab: tab.id, columns: null })}>{tabLabel(tab.id, tab.label)}</button>
         ))}
-      </div>
+      </div>}
 
-      <div className="toolbar">
-        <input data-testid="screen-search" className="ctrl search" aria-label="Hisse ara" value={draft.search} placeholder="Sembol veya şirket" onChange={(event) => patch({ search: event.target.value })} />
+      {showResults && <div className="toolbar">
         <span className="count">{paged.total} hisse</span>
         <div className="pager">
           <button type="button" className="btn" data-testid="screen-page-prev" disabled={paged.page <= 1} onClick={() => setPage((value) => value - 1)}>Önceki</button>
@@ -549,8 +659,8 @@ export function Screener({
           </select>
           <button type="button" className={`btn${columnsOpen ? " is-on" : ""}`} data-testid="screen-columns" onClick={() => setColumnsOpen((value) => !value)}>Kolonlar</button>
         </div>
-      </div>
-      {columnsOpen && (
+      </div>}
+      {showResults && columnsOpen && (
         <div data-testid="screen-column-menu" className="column-menu">
           {COLUMNS.map((column) => (
             <label key={column.id}>
@@ -561,7 +671,7 @@ export function Screener({
         </div>
       )}
 
-      <div data-testid="screen-table-wrap" data-scroll="x" className="table-wrap">
+      {showResults && <div data-testid="screen-table-wrap" data-scroll="x" className="table-wrap">
         <table className="screen-table">
           <thead>
             <tr>
@@ -606,7 +716,7 @@ export function Screener({
           </tbody>
         </table>
         {filtered.length === 0 && <p data-testid="screen-empty" className="empty">Bu filtreye uyan hisse yok.</p>}
-      </div>
+      </div>}
     </div>
   );
 }

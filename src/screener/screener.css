@@ -143,6 +143,11 @@
   border-color: #3a3a3a;
 }
 
+.btn-run {
+  border-color: #6a6a6a;
+  background: #1c1c1c;
+}
+
 .btn:disabled {
   opacity: 0.4;
   cursor: default;
@@ -324,8 +329,9 @@
 }
 
 .search {
-  width: min(280px, 100%);
-  flex: 0 1 260px;
+  width: 100%;
+  height: var(--s-h);
+  flex: none;
 }
 
 .count,
@@ -553,6 +559,58 @@
   text-align: center;
 }
 
+.status {
+  margin: 0;
+  padding: 72px 24px;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.status.idle {
+  color: #cfcfcf;
+}
+
+.status.loading {
+  color: #bdbdbd;
+}
+
+.status.error {
+  color: #e7b3b0;
+}
+
+.search-field {
+  flex: 1 1 240px;
+  max-width: 360px;
+}
+
+.search-list {
+  margin: 0;
+  padding: 8px 20px 28px;
+  list-style: none;
+}
+
+.search-list button {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: min(520px, 100%);
+  height: 44px;
+  margin: 0 0 8px;
+  padding: 0 12px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--s-radius);
+  background: #101010;
+  color: var(--s-text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.search-list button:hover {
+  background: #161616;
+}
+
 @media (max-width: 1280px) {
   .saved-select,
   .name-input {
@@ -612,10 +670,17 @@
   .quick,
   .name-input,
   .saved-select,
-  .search,
+  .search-field,
   .sort-field {
     flex-basis: 100%;
     width: 100%;
+    max-width: none;
+  }
+
+  .search {
+    flex-basis: auto;
+    width: 100%;
+    height: var(--s-h);
   }
 
   .tab {

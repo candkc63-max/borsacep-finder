@@ -10,7 +10,7 @@ export default function App() {
     () => (isChartHash(window.location.hash) ? "grafik" : "filter"),
   );
   const [stocks, setStocks] = useState<Stock[]>(STOCKS);
-  const [source, setSource] = useState<"loading" | "yahoo" | "sample">("loading");
+  const [source, setSource] = useState<"idle" | "loading" | "yahoo" | "error">("idle");
   const [asOf, setAsOf] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,25 +19,24 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  useEffect(() => {
-    let cancel = false;
-    fetch("/api/bist-quotes")
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((body: { stocks?: Stock[]; asOf?: string }) => {
-        if (cancel || !body.stocks?.length) return;
-        const merged = mergeScan(STOCKS, body.stocks, readQuoteCache(sessionStorage), Date.now(), QUOTE_CACHE_TTL);
-        writeQuoteCache(merged.cache, sessionStorage);
-        setStocks(merged.stocks);
-        setSource("yahoo");
-        setAsOf(body.asOf ?? null);
-      })
-      .catch(() => {
-        if (!cancel) setSource("sample");
-      });
-    return () => {
-      cancel = true;
-    };
-  }, []);
+  async function loadQuotes() {
+    setSource("loading");
+    const response = await fetch("/api/bist-quotes");
+    if (!response.ok) {
+      setSource("error");
+      throw new Error("quotes");
+    }
+    const body = await response.json() as { stocks?: Stock[]; asOf?: string };
+    if (!body.stocks?.length) {
+      setSource("error");
+      throw new Error("quotes");
+    }
+    const merged = mergeScan(STOCKS, body.stocks, readQuoteCache(sessionStorage), Date.now(), QUOTE_CACHE_TTL);
+    writeQuoteCache(merged.cache, sessionStorage);
+    setStocks(merged.stocks);
+    setSource("yahoo");
+    setAsOf(body.asOf ?? null);
+  }
 
   function openChart(ticker: string, blank: boolean) {
     const hash = chartHash(ticker);
@@ -66,7 +65,9 @@ export default function App() {
     ? `Yahoo Finance${asOf ? ` · ${new Date(asOf).toLocaleString("tr-TR")}` : ""}`
     : source === "loading"
       ? "Canlı veri yükleniyor"
-      : "Canlı veri alınamadı, örnek liste duruyor";
+      : source === "error"
+        ? "Canlı veri alınamadı"
+        : "Tarama başlatılmadı";
 
-  return <Screener stocks={stocks} sourceLabel={sourceLabel} onOpen={openChart} />;
+  return <Screener stocks={stocks} sourceLabel={sourceLabel} onOpen={openChart} onScan={loadQuotes} />;
 }
